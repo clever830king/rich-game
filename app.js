@@ -105,7 +105,10 @@
     const data = cleanRoom(room);
     writeChain = writeChain
       .then(() => roomRef(code).set(data))
-      .catch(e => console.warn("写入房间失败", e));
+      .catch(e => {
+        console.warn("写入房间失败", e);
+        toast("房间保存失败，请检查数据库写权限");
+      });
   }
 
   function saveAndBroadcast() { saveRoomToCloud(S.room); }
@@ -881,6 +884,9 @@
   bind();
   renderHome();
   setInterval(refreshPresence, 6000);
+  setInterval(function () {
+    if (S.code && CLOUD_DB && S.room) pullRoom();
+  }, 3000);
 
   initCloud().then(function () {
     console.log("CloudBase 已连接");
