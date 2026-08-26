@@ -85,7 +85,10 @@
   function presenceRef(code, pid) { return CLOUD_DB.collection("presence").doc(code + "_" + pid); }
 
   function cleanRoom(room) {
-    return JSON.parse(JSON.stringify(room));
+    const o = JSON.parse(JSON.stringify(room));
+    delete o._id;
+    delete o._openid;
+    return o;
   }
 
   function extractDoc(res) {
