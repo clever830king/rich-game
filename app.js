@@ -111,12 +111,12 @@
       .then(res => {
         if (res && res.code) {
           console.warn("写入房间失败", res.code, res.message);
-          toast("房间保存失败，请检查数据库写权限");
+          toast("保存失败 " + (res.code || "") + " " + (res.message || ""));
         }
       })
       .catch(e => {
         console.warn("写入房间失败", e);
-        toast("房间保存失败，请检查数据库写权限");
+        toast("保存失败 " + (e && (e.code || e.message) || ""));
       });
   }
 
@@ -219,24 +219,24 @@
     CLOUD_DB.collection("rooms").limit(1).get().then(function (res) {
       if (res && res.code) {
         console.warn("读权限失败", res.code, res.message);
-        toast("数据库读权限未配置：read 需设为 auth != null");
+        toast("读失败 " + (res.code || "") + " " + (res.message || ""));
         return;
       }
       const testRef = CLOUD_DB.collection("rooms").doc("__perm_test__");
       testRef.set({ t: Date.now() }).then(function (res2) {
         if (res2 && res2.code) {
           console.warn("写权限失败", res2.code, res2.message);
-          toast("数据库写权限未配置：write 需设为 auth != null");
+          toast("写失败 " + (res2.code || "") + " " + (res2.message || ""));
         } else {
           testRef.remove().catch(function () {});
         }
       }).catch(function (e) {
         console.warn("写权限异常", e);
-        toast("数据库写权限未配置：write 需设为 auth != null");
+        toast("写失败 " + (e && (e.code || e.message) || ""));
       });
     }).catch(function (e) {
       console.warn("数据库访问失败", e);
-      toast("数据库读权限未配置：read 需设为 auth != null");
+      toast("读失败 " + (e && (e.code || e.message) || ""));
     });
   }
 
