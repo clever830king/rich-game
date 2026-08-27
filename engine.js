@@ -61,6 +61,8 @@
       players: [host],
       props: initProps(),
       turn: 0,
+      rolled: false,
+      turnStartedAt: 0,
       phase: "waiting",
       pending: null,
       pendingCheat: null,
@@ -333,7 +335,7 @@
       case "jail":
       case "card":
       case "fate":
-        endTurn(room); break;
+        finishTurn(room); break;
       case "buy":
         resolveBuy(room, action); break;
       case "build":
@@ -345,9 +347,9 @@
       case "opportunity":
         resolveOpportunity(room, action); break;
       case "opportunity_result":
-        endTurn(room); break;
+        finishTurn(room); break;
       default:
-        endTurn(room); break;
+        finishTurn(room); break;
     }
   }
 
@@ -365,7 +367,7 @@
         log(room, p.name + " 购买「" + cell.name + "」区域" + pr.regionsOwned + "/" + cell.regionCount + "，花费 ¥" + cost);
       }
     }
-    endTurn(room);
+    finishTurn(room);
   }
 
   function resolveBuild(room, action) {
@@ -382,7 +384,7 @@
       log(room, p.name + " 将「" + cell.name + "」升级到 " + BUILD_NAMES[pr.buildingLevel] + "，花费 ¥" + cost);
       if (pr.buildingLevel >= 6) log(room, "🎉 " + p.name + " 建成【新城】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
     }
-    endTurn(room);
+    finishTurn(room);
   }
 
   function resolvePay(room, action) {
@@ -392,13 +394,13 @@
     if (action.boss && pend.canBoss && p.boss > 0) {
       p.boss--;
       log(room, p.name + " 使用霸王卡免除 ¥" + pend.toll + " 过路费");
-      endTurn(room); return;
+      finishTurn(room); return;
     }
     if (p.money >= pend.toll) {
       p.money -= pend.toll;
       if (owner) owner.money += pend.toll;
       log(room, p.name + " 支付 ¥" + pend.toll + " 给 " + (owner ? owner.name : "银行"));
-      endTurn(room);
+      finishTurn(room);
     } else {
       pend.type = "emergency";
       pend.shortfall = pend.toll - p.money;
@@ -426,7 +428,7 @@
         if (owner) owner.money += pend.toll;
         log(room, p.name + " 支付 ¥" + pend.toll + " 给 " + (owner ? owner.name : "银行"));
         room.pending = null;
-        endTurn(room);
+        finishTurn(room);
       } else {
         room.seq++;
       }
@@ -442,7 +444,7 @@
       const card = pend.card;
       if (p.money < card.lose) {
         log(room, p.name + " 资金不足，无法把握「" + card.name + "」");
-        endTurn(room); return;
+        finishTurn(room); return;
       }
       const d = die();
       const success = d % 2 === 0;
@@ -474,7 +476,7 @@
       room.seq++;
     } else {
       log(room, p.name + " 放弃了机会「" + pend.card.name + "」");
-      endTurn(room);
+      finishTurn(room);
     }
   }
 
@@ -497,8 +499,18 @@
     room.pending = null;
     room.dice = null;
     room.jailRoll = null;
+    room.rolled = false;
     room.phase = "action";
     nextTurn(room);
+  }
+
+  // 回合内结算完成（买地/支付/机会等处理完），但还没点“结束回合”，不进入下一位
+  function finishTurn(room) {
+    room.pending = null;
+    room.dice = null;
+    room.jailRoll = null;
+    room.rolled = true;
+    room.phase = "action";
   }
 
   function nextTurn(room) {
@@ -509,6 +521,8 @@
       if (p.jailSkip > 0) { p.skipReason = "jail"; p.jailSkip--; log(room, p.name + " 在乔司监狱停留一回合"); room.seq++; return; }
       if (p.paused > 0) { p.skipReason = "pause"; p.paused--; log(room, p.name + " 被命运暂停一回合"); room.seq++; return; }
       p.skipReason = null;
+      room.rolled = false;
+      room.turnStartedAt = Date.now();
       log(room, "轮到 " + p.name);
       room.seq++;
       return;
@@ -703,6 +717,7 @@
     currentPlayer: currentPlayer,
     roll: roll,
     resolve: resolve,
+    endTurn: endTurn,
     skipTurn: skipTurn,
     forceEndTurn: forceEndTurn,
     useCard: useCard,
