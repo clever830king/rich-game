@@ -21,6 +21,7 @@
     return s;
   }
   function die() { return 1 + Math.floor(Math.random() * 6); }
+  function moveDie() { return 1 + Math.floor(Math.random() * 12); }
   function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
   function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
   function log(room, text) { room.log.unshift({ t: Date.now(), text: text }); if (room.log.length > 300) room.log.length = 300; }
@@ -63,6 +64,7 @@
       turn: 0,
       rolled: false,
       turnStartedAt: 0,
+      landingStartedAt: 0,
       phase: "waiting",
       pending: null,
       pendingCheat: null,
@@ -219,7 +221,7 @@
       p.pos = (p.pos + dir + N) % N;
       path.push(p.pos);
       const c = BOARD[p.pos];
-      if (c.t === "start" && c.id === p.start) { p.money += sr; reward += sr; }
+      if (c.t === "start") { p.money += sr; reward += sr; }
     }
     return { path: path, reward: reward };
   }
@@ -229,7 +231,7 @@
     const p = currentPlayer(room);
     let d;
     if (room.pendingCheat != null) { d = room.pendingCheat; room.pendingCheat = null; }
-    else d = die();
+    else d = moveDie();
     const reverse = p.reverse > 0;
     const mv = moveBy(room, p, d, reverse);
     if (p.reverse > 0) p.reverse--;
@@ -239,6 +241,7 @@
     const pending = buildLanding(room, p, cell, mv.reward);
     room.pending = pending;
     room.phase = "landing";
+    room.landingStartedAt = Date.now();
     room.seq++;
     return { dice: d, reverse: reverse, path: mv.path, reward: mv.reward, cell: cell.index, pending: pending };
   }
@@ -583,7 +586,7 @@
         return useStop(room, p, idx, opts);
       }
       case "cheat": {
-        const v = clamp(parseInt(opts.value, 10) || 1, 1, 6);
+        const v = clamp(parseInt(opts.value, 10) || 1, 1, 12);
         room.pendingCheat = v;
         log(room, p.name + " 使用作弊卡，本回合点数设为 " + v);
         break;
