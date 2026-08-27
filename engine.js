@@ -511,6 +511,7 @@
     room.jailRoll = null;
     room.rolled = true;
     room.phase = "action";
+    room.seq++;
   }
 
   function nextTurn(room) {
