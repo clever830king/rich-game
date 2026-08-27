@@ -150,6 +150,9 @@
     room.status = "playing";
     room.phase = "action";
     room.turn = 0;
+    room.rolled = false;
+    room.turnStartedAt = Date.now();
+    room.landingStartedAt = 0;
     room.seq++;
     log(room, "游戏开始！每人初始资金 ¥" + room.settings.initialMoney);
     if (aiCount > 0) log(room, "已加入 " + aiCount + " 名 AI 玩家");
