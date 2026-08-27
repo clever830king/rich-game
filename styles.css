@@ -44,9 +44,13 @@ body {
 .join-row input { flex: 1; }
 .reconnect { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding: 10px 12px; background: var(--primary-soft); border-radius: 11px; font-size: 13px; color: var(--primary); }
 .home-note { color: var(--muted); font-size: 12px; margin-top: 18px; }
-.conn-status { font-size: 12px; margin-top: 8px; color: var(--muted); }
-.conn-status.ok { color: var(--green); font-weight: 600; }
-.conn-status.warn { color: var(--amber); font-weight: 600; }
+.conn-status {
+  display: inline-block; font-size: 13px; font-weight: 700;
+  margin: 12px auto 0; padding: 6px 16px; border-radius: 20px;
+  background: #eef1f0; color: var(--muted); letter-spacing: .5px;
+}
+.conn-status.ok { background: #dff5e9; color: #18794e; }
+.conn-status.warn { background: #fdeee1; color: #b45309; }
 .avatar-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .avatar-btn {
   width: 44px; height: 44px; border-radius: 11px; border: 2px solid var(--line);
