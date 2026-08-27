@@ -510,7 +510,10 @@
     BOARD.forEach(function (c) {
       if (c.t === "prop") {
         const pr = room.props[c.index];
-        if (pr && pr.owner === p.id) { pr.owner = null; }
+        if (pr && pr.owner === p.id) {
+          pr.owner = null;
+          if (pr.buildingLevel <= 0) pr.regionsOwned = 0; // 无建筑则完全变空地
+        }
       }
     });
     log(room, p.name + " 破产，退出游戏（其地产变为空地，建筑保留）");
