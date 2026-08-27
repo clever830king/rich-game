@@ -405,6 +405,23 @@
       row.appendChild(h("button", { class: "avatar-btn" + (t === SEL_TOKEN ? " sel" : ""), onclick: function () { SEL_TOKEN = t; renderAvatarRow(); } }, t));
     });
   }
+  function renderRoomAvatars() {
+    const row = $("#roomAvatarRow");
+    if (!row) return;
+    row.innerHTML = "";
+    const meP = me();
+    (EN.TOKENS || ["🎩"]).forEach(function (t) {
+      row.appendChild(h("button", { class: "avatar-btn" + (meP && meP.token === t ? " sel" : ""), onclick: function () { changeAvatar(t); } }, t));
+    });
+  }
+  function changeAvatar(t) {
+    const p = me();
+    if (!p) return;
+    p.token = t;
+    SEL_TOKEN = t;
+    saveAndBroadcast();
+    renderRoomAvatars();
+  }
   function readSession() { try { return JSON.parse(localStorage.getItem(LS_SESSION)); } catch (e) { return null; } }
   function checkReconnect() {
     const sess = readSession();
@@ -442,6 +459,7 @@
     $("#setAI").value = String(room.settings.aiCount);
     $("#setSound").value = room.settings.sound ? "1" : "0";
     $("#setAnim").value = room.settings.anim;
+    renderRoomAvatars();
     $("#btnStart").disabled = !(isHost && (room.players.length + (room.settings.aiCount || 0)) >= 2);
   }
 
@@ -473,6 +491,11 @@
     renderActionBar();
     renderDice();
     renderBigEvent();
+    const endBtn = $("#endTurnBtn");
+    if (endBtn) {
+      const showEnd = isMe() && room.phase === "action" && (room.rolled || cur().skipReason);
+      endBtn.classList.toggle("hidden", !showEnd);
+    }
   }
 
   // 棋盘：23 列 × 10 行。右下=起点A，左下=乔司监狱，左上=起点B，右上=卡牌补给站
@@ -636,7 +659,7 @@
         landingModal();
         render();
       }
-    }, 850);
+    }, 1350);
   }
   function renderDice() {
     const room = S.room;
@@ -658,7 +681,7 @@
         diceTimer = setInterval(function () {
           el.textContent = 1 + Math.floor(Math.random() * 6);
           n++;
-          if (n >= 8) {
+          if (n >= 12) {
             clearInterval(diceTimer);
             el.textContent = room.dice;
             el.classList.remove("rolling");
@@ -666,7 +689,7 @@
             void el.offsetWidth;
             el.classList.add("pop");
           }
-        }, 90);
+        }, 100);
       }
     } else {
       el.classList.add("hidden");
@@ -764,19 +787,17 @@
       return;
     }
     if (room.phase === "landing") {
-      if (landingMsg) {
-        box.appendChild(h("div", { class: "ab-hint" }, landingMsg));
-        box.appendChild(btn("结算完成", () => { landingMsg = null; doneLanding({}); }));
-      } else {
-        box.appendChild(h("div", { class: "ab-hint" }, "结算中…"));
-      }
+      box.appendChild(h("div", { class: "ab-hint" }, "结算中…"));
       return;
     }
     landingMsg = null;
+    if (room.rolled) {
+      box.appendChild(h("div", { class: "ab-hint" }, "本回合已完成，请点击下方绿色「结束回合」按钮"));
+      return;
+    }
     if (cur().skipReason) {
       const msg = cur().skipReason === "jail" ? "你在乔司监狱，本回合无法行动" : "你被暂停，本回合无法行动";
-      box.appendChild(h("div", { class: "ab-hint" }, msg));
-      box.appendChild(btn("结束回合", () => endSkip()));
+      box.appendChild(h("div", { class: "ab-hint" }, msg + "，请点击下方绿色「结束回合」按钮"));
       return;
     }
     const p = cur();
@@ -796,6 +817,14 @@
     saveAndBroadcast();
     render();
   }
+  function endTurnNow() {
+    if (!isMe()) { toast("还没轮到你"); return; }
+    EN.endTurn(S.room);
+    landingMsg = null;
+    closeModal();
+    saveAndBroadcast();
+    render();
+  }
   function showRules() {
     openModal("游戏规则", h("div", { class: "rules" }, RULES.map(function (t) { return h("p", {}, t); })), [h("button", { class: "btn btn-ghost", onclick: closeModal }, "关闭")]);
   }
@@ -810,18 +839,21 @@
   }
   function startAiDriver() {
     if (aiTimer) clearInterval(aiTimer);
-    aiTimer = setInterval(aiTick, 1400);
+    aiTimer = setInterval(aiTick, 800);
   }
   function aiTick() {
     if (!isAiDriver() || !S.room || S.room.status !== "playing") return;
     const cp = cur();
     if (!cp || cp.bankrupt) return;
-    if (!(cp.isAI || !isOnline(cp))) return;
-    if (S.room.phase === "action") aiAct();
+    const elapsed = Date.now() - (S.room.turnStartedAt || 0);
+    const shouldAct = cp.isAI ? elapsed > 1200 : (!isOnline(cp) && elapsed > 30000);
+    if (!shouldAct) return;
+    if (S.room.phase === "action" && !S.room.rolled) aiAct();
     else if (S.room.phase === "landing" && S.room.pending) aiResolve();
+    else if (S.room.phase === "action" && S.room.rolled) { EN.endTurn(S.room); saveAndBroadcast(); render(); }
   }
   function aiAct() {
-    if (cur().skipReason) { EN.skipTurn(S.room); saveAndBroadcast(); render(); return; }
+    if (cur().skipReason) { EN.endTurn(S.room); saveAndBroadcast(); render(); return; }
     EN.roll(S.room);
     saveAndBroadcast();
     render();
@@ -1151,7 +1183,7 @@
     $("#btnReconnect").onclick = reconnect;
     $("#btnLeave").onclick = leaveRoom;
     $("#btnExitGame").onclick = leaveRoom;
-    $("#btnEndTurn").onclick = forceEndTurn;
+    $("#endTurnBtn").onclick = endTurnNow;
     $("#btnCopyCode").onclick = () => {
       const code = S.room && S.room.code;
       if (!code) return;
