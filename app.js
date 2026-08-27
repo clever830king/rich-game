@@ -508,7 +508,8 @@
       h("div", { class: "board-center-title" }, "金聪明游浙江"),
       h("div", { class: "board-center-sub" }, "游历浙江 12 城"),
       h("div", { class: "scenery", id: "scenery" }),
-      h("div", { class: "center-log", id: "centerLog" })
+      h("div", { class: "center-log", id: "centerLog" }),
+      h("div", { class: "center-log-hint" }, "若卡在结算中，请耐心等待 10 秒，会自动跳过回合")
     ));
     const curCell = cur() ? cur().pos : -1;
     BOARD.forEach(c => {
@@ -531,6 +532,7 @@
       }
       if (c.t === "prop") cell.appendChild(h("div", { class: "c-city" }, c.city || ""));
       cell.appendChild(h("div", { class: "c-name" }, c.name));
+      if (c.desc) cell.appendChild(h("div", { class: "c-desc" }, c.desc));
       if (c.t === "prop") {
         if (pr.buildingLevel > 0) {
           cell.appendChild(h("div", { class: "c-building" }, BUILD_ICONS[pr.buildingLevel] + " " + ZT.BUILD_NAMES[pr.buildingLevel]));
@@ -661,7 +663,7 @@
         el.classList.add("rolling");
         let n = 0;
         diceTimer = setInterval(function () {
-          el.textContent = 1 + Math.floor(Math.random() * 6);
+          el.textContent = 1 + Math.floor(Math.random() * 12);
           n++;
           if (n >= 12) {
             clearInterval(diceTimer);
@@ -828,6 +830,14 @@
     const cp = cur();
     if (!cp || cp.bankrupt) return;
     const elapsed = Date.now() - (S.room.turnStartedAt || 0);
+    const landingElapsed = Date.now() - (S.room.landingStartedAt || 0);
+    // 卡在结算中超过 10 秒：自动跳过，避免卡死
+    if (S.room.phase === "landing" && landingElapsed > 10000) {
+      EN.forceEndTurn(S.room);
+      saveAndBroadcast();
+      render();
+      return;
+    }
     const shouldAct = cp.isAI ? elapsed > 1200 : (!isOnline(cp) && elapsed > 30000);
     if (!shouldAct) return;
     if (S.room.phase === "action" && !S.room.rolled) aiAct();
@@ -995,7 +1005,7 @@
   function cardFlow(cardId) {
     if (cardId === "cheat") {
       const body = h("div", {}, h("div", { class: "dim", style: { marginBottom: "10px" } }, "选择本回合骰子点数"), h("div", { class: "grid-6" }));
-      for (let v = 1; v <= 6; v++) body.lastChild.appendChild(h("button", { class: "die-btn", onclick: () => doCard(cardId, { value: v }) }, "" + v));
+      for (let v = 1; v <= 12; v++) body.lastChild.appendChild(h("button", { class: "die-btn", onclick: () => doCard(cardId, { value: v }) }, "" + v));
       openModal("作弊卡", body, [h("button", { class: "btn btn-ghost", onclick: cardsModal }, "返回")]);
       return;
     }
