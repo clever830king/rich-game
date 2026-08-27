@@ -1186,7 +1186,7 @@
     $("#setMax").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.maxPlayers = parseInt($("#setMax").value, 10) || 6; saveAndBroadcast(); } };
     $("#setCityBonus").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.cityBonusStep = parseFloat($("#setCityBonus").value) || 0.2; saveAndBroadcast(); } };
     $("#setStartReward").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.startReward = parseInt($("#setStartReward").value, 10) || ZT.START_REWARD; saveAndBroadcast(); } };
-    $("#setAI").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.aiCount = parseInt($("#setAI").value, 10) || 0; saveAndBroadcast(); } };
+    $("#setAI").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.aiCount = parseInt($("#setAI").value, 10) || 0; S.room.seq++; saveAndBroadcast(); render(); } };
     $("#setSound").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.sound = $("#setSound").value === "1"; saveAndBroadcast(); } };
     $("#setAnim").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.anim = $("#setAnim").value; saveAndBroadcast(); } };
   }
