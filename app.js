@@ -101,6 +101,20 @@
     try { const s = localStorage.getItem(localKey(code)); return s ? JSON.parse(s) : null; } catch (e) { return null; }
   }
   function isLocal() { return !CLOUD_READY; }
+  function updateConnStatus() {
+    const el = $("#connStatus");
+    if (!el) return;
+    if (CLOUD_READY) {
+      el.textContent = "✅ 云端联机已连接（可跨设备联机）";
+      el.className = "conn-status ok";
+    } else if (CLOUD_DB) {
+      el.textContent = "⏳ 正在连接云端…";
+      el.className = "conn-status";
+    } else {
+      el.textContent = "⚠️ 本地模式（无法跨设备联机，请检查腾讯云：匿名登录/数据库权限/安全域名）";
+      el.className = "conn-status warn";
+    }
+  }
 
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
@@ -246,6 +260,7 @@
   function initCloud() {
     if (typeof window.cloudbase === "undefined") {
       toast("联机组件加载失败，请检查网络");
+      updateConnStatus();
       return Promise.resolve();
     }
     const opts = { env: CLOUD_ENV, region: "ap-shanghai" };
@@ -255,9 +270,11 @@
       app = window.cloudbase.init(opts);
       db = app.database();
       CLOUD_DB = db;
+      updateConnStatus();
     } catch (e) {
       console.warn("CloudBase 初始化失败", e);
       toast("联机服务初始化失败");
+      updateConnStatus();
       return Promise.resolve();
     }
     if (CLOUD_ACCESS_KEY) { verifyDb(); return Promise.resolve(); }
@@ -266,7 +283,7 @@
       ? a.signInAnonymously()
       : ((a && typeof a.anonymousAuthProvider === "function") ? a.anonymousAuthProvider().signIn() : Promise.resolve());
     return doLogin.then(function (r) {
-      if (r && r.error) { console.warn("匿名登录失败", r.error.code || r.error); toast("联机登录失败：请确认已开启“匿名登录”"); return r; }
+      if (r && r.error) { console.warn("匿名登录失败", r.error.code || r.error); CLOUD_DB = null; updateConnStatus(); toast("联机登录失败：请确认已开启“匿名登录”"); return r; }
       verifyDb();
       return r;
     }).catch(function (e) { console.warn("匿名登录异常", e); toast("联机登录失败，请检查网络"); });
@@ -277,7 +294,8 @@
       if (res && res.code) {
         console.warn("读权限失败", res.code, res.message);
         CLOUD_DB = null;
-        toast("云端暂不可用，已切换本地联机（同浏览器多标签页可玩）");
+        updateConnStatus();
+        toast("云端读失败 " + res.code + "，已切换本地模式");
         return;
       }
       const testRef = CLOUD_DB.collection("rooms").doc("__perm_test__");
@@ -285,20 +303,25 @@
         if (res2 && res2.code) {
           console.warn("写权限失败", res2.code, res2.message);
           CLOUD_DB = null;
-          toast("云端暂不可用，已切换本地联机（同浏览器多标签页可玩）");
+          updateConnStatus();
+          toast("云端写失败 " + res2.code + "，已切换本地模式");
         } else {
           CLOUD_READY = true;
           testRef.remove().catch(function () {});
+          updateConnStatus();
+          if (S.room) { saveRoomToCloud(S.room); }
         }
       }).catch(function (e) {
         console.warn("写权限异常", e);
         CLOUD_DB = null;
-        toast("云端暂不可用，已切换本地联机（同浏览器多标签页可玩）");
+        updateConnStatus();
+        toast("云端写异常，已切换本地模式");
       });
     }).catch(function (e) {
       console.warn("数据库访问失败", e);
       CLOUD_DB = null;
-      toast("云端暂不可用，已切换本地联机（同浏览器多标签页可玩）");
+      updateConnStatus();
+      toast("云端读异常，已切换本地模式");
     });
   }
 
