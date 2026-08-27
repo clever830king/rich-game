@@ -700,6 +700,19 @@
     return { ok: true, value: val };
   }
 
+  // ===== 抵押卡牌（一张卡 ¥5000）=====
+  function mortgageCard(room, playerId, cardId) {
+    const p = playerById(room, playerId);
+    if (!p || room.phase !== "action" || currentPlayer(room).id !== playerId) return { error: "现在不能抵押" };
+    const idx = p.cards.indexOf(cardId);
+    if (idx < 0) return { error: "没有这张卡" };
+    p.cards.splice(idx, 1);
+    p.money += 5000;
+    log(room, p.name + " 抵押一张【" + cardName(cardId) + "】，获得 ¥5000");
+    room.seq++;
+    return { ok: true, value: 5000 };
+  }
+
   // ===== 聊天室 =====
   function sendChat(room, playerId, text) {
     const p = playerById(room, playerId);
@@ -752,6 +765,7 @@
     useCard: useCard,
     stopActionInfo: stopActionInfo,
     mortgage: mortgage,
+    mortgageCard: mortgageCard,
     sendChat: sendChat,
     tollOf: tollOf,
     propToll: propToll,
