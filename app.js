@@ -462,7 +462,12 @@
     renderPieces();
     renderPlayers();
     renderChat();
-    if (isMe() && room.phase === "landing" && room.pending) landingModal();
+    if (isMe() && room.phase === "landing" && room.pending) {
+      scheduleLanding();
+    } else {
+      landingKey = null;
+      if (landingTimer) { clearTimeout(landingTimer); landingTimer = null; }
+    }
     renderActionBar();
     renderDice();
     renderBigEvent();
@@ -606,6 +611,7 @@
   }
 
   let lastDice = null, diceTimer = null, autoTimer = null, sceneIdx = 0;
+  let landingTimer = null, landingKey = null;
   function scheduleAutoResolve(delay) {
     if (autoTimer) clearTimeout(autoTimer);
     autoTimer = setTimeout(function () {
@@ -615,6 +621,20 @@
         doneLanding({});
       }
     }, delay || 1500);
+  }
+  // 掷骰子动画播完后再弹结算/购买弹窗，避免挡住骰子点数
+  function scheduleLanding() {
+    const key = S.room.turn + ":" + (S.room.pending ? S.room.pending.type : "");
+    if (landingKey === key) return;
+    landingKey = key;
+    if (landingTimer) clearTimeout(landingTimer);
+    landingTimer = setTimeout(function () {
+      landingTimer = null;
+      if (S.room && isMe() && S.room.phase === "landing" && S.room.pending) {
+        landingModal();
+        render();
+      }
+    }, 850);
   }
   function renderDice() {
     const room = S.room;
