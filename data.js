@@ -88,7 +88,7 @@
   // t: start / prop / fate / opportunity / empty / jail / card
   // prop 字段：city、name、regions（区域显示名）、gdp（亿元，用于定档）、composition（市区组成说明，可选）
   const BOARD_RAW = [
-    { t: "start", id: "A", name: "起点·右下" },
+    { t: "start", id: "A", name: "起点·右下", desc: "经过或到达可获得奖金" },
     { t: "prop", city: "湖州", name: "长兴", regions: ["长兴"], gdp: 1000.90 },
     { t: "prop", city: "湖州", name: "湖州市区", regions: ["湖州市区"], gdp: 1374.00, composition: "吴兴区" },
     { t: "prop", city: "湖州", name: "南浔", regions: ["南浔"], gdp: 622.40 },
@@ -119,7 +119,7 @@
     { t: "prop", city: "衢州", name: "柯城·衢江", regions: ["柯城", "衢江"], gdp: 1139.69 },
     { t: "prop", city: "衢州", name: "常山·开化", regions: ["常山", "开化"], gdp: 451.80 },
     { t: "prop", city: "衢州", name: "江山", regions: ["江山"], gdp: 451.56 },
-    { t: "start", id: "B", name: "起点·左上" },
+    { t: "start", id: "B", name: "起点·左上", desc: "经过或到达可获得奖金" },
     { t: "prop", city: "金华", name: "金华市区·兰溪", regions: ["金华市区", "兰溪"], gdp: 1919.33, composition: "婺城+金东 / 兰溪" },
     { t: "prop", city: "金华", name: "义乌·浦江", regions: ["义乌", "浦江"], gdp: 3034.74 },
     { t: "prop", city: "金华", name: "东阳·磐安", regions: ["东阳", "磐安"], gdp: 1059.40 },
