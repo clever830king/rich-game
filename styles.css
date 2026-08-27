@@ -203,6 +203,11 @@ body {
 }
 .big-dice.pop { animation: dicePop .55s cubic-bezier(.2,.8,.2,1); }
 .big-dice.rolling { animation: diceShake .45s linear infinite; }
+.big-dice-name {
+  position: fixed; top: calc(50% + 62px); left: 50%; transform: translateX(-50%);
+  background: rgba(28,35,51,.88); color: #fff; padding: 5px 14px; border-radius: 16px;
+  font-size: 14px; font-weight: 700; z-index: 46; pointer-events: none; white-space: nowrap;
+}
 @keyframes diceShake {
   0% { transform: translate(-50%,-50%) rotate(0deg) scale(1); }
   25% { transform: translate(-50%,-50%) rotate(-12deg) scale(1.06); }
