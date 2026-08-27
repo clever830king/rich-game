@@ -42,6 +42,7 @@
       jailSkip: 0,
       paused: 0,
       boss: 0,
+      aiManaged: false,
       bankrupt: false,
       secret: uid()
     };
@@ -107,6 +108,7 @@
       jailSkip: 0,
       paused: 0,
       boss: 0,
+      aiManaged: false,
       bankrupt: false,
       secret: uid()
     };
@@ -138,7 +140,7 @@
         name: "AI·" + (aiNames[i] || ("机器人" + (i + 1))),
         token: TOKENS[(room.players.length + i) % TOKENS.length],
         isAI: true,
-        money: 0, pos: 0, start: "A", cards: [], reverse: 0, jailSkip: 0, paused: 0, boss: 0, bankrupt: false, secret: uid()
+        money: 0, pos: 0, start: "A", cards: [], reverse: 0, jailSkip: 0, paused: 0, boss: 0, aiManaged: false, bankrupt: false, secret: uid()
       };
       setupPlayer(room, ai, idxB);
       room.players.push(ai);
@@ -210,7 +212,8 @@
     const step = room.settings.cityBonusStep != null ? room.settings.cityBonusStep : 0.2;
     const cityMult = 1 + Math.max(0, cnt - 1) * step;
     const ntMult = newTownMultiplier(room);
-    return Math.round(base * cityMult * ntMult);
+    const regionMult = (cell.regionCount >= 2 && pr.regionsOwned >= 2) ? 1.5 : 1;
+    return Math.round(base * regionMult * cityMult * ntMult);
   }
   function tollOf(room, cell) { return propToll(room, cell); }
 
@@ -313,6 +316,10 @@
     } else if (card.type === "money") {
       p.money = Math.max(0, p.money + card.amount);
       desc = (card.amount >= 0 ? "获得 ¥" + card.amount : "损失 ¥" + (-card.amount));
+    } else if (card.type === "moneyPct") {
+      const delta = Math.round(p.money * card.pct / 100);
+      p.money = Math.max(0, p.money + delta);
+      desc = (delta >= 0 ? "获得 ¥" + delta + "（" + card.pct + "%）" : "损失 ¥" + (-delta) + "（" + Math.abs(card.pct) + "%）");
     } else if (card.type === "back3") {
       const mv = moveBy(room, p, 3, true);
       desc = "向后移动 3 格";
@@ -474,7 +481,7 @@
       const success = d % 2 === 0;
       let delta = 0, extra = "";
       if (success) {
-        delta = card.win - card.invest;
+        delta = card.winPct ? Math.round(p.money * card.winPct / 100) - card.invest : (card.win - card.invest);
         p.money += delta;
         if (card.winCard) {
           const ids = [];
@@ -482,8 +489,8 @@
           extra = "，并得到 " + ids.join("、");
         }
       } else {
-        delta = -card.lose;
-        p.money -= card.lose;
+        delta = card.losePct ? -Math.round(p.money * card.losePct / 100) : -card.lose;
+        p.money = Math.max(0, p.money + delta);
         if (card.loseCard) {
           let lost = [];
           for (let i = 0; i < card.loseCard; i++) {
@@ -619,16 +626,10 @@
         const cell = BOARD[p.pos];
         if (cell.t !== "prop") return { error: "脚下不是城市地块" };
         const pr = room.props[p.pos];
-        if (pr.owner !== p.id) return { error: "脚下不是自己的地块" };
-        if (pr.buildingLevel > 0) {
-          pr.buildingLevel = Math.max(0, pr.buildingLevel - 3);
-          log(room, p.name + " 使用爆破卡，「" + cell.name + "」建筑降到 " + (pr.buildingLevel ? BUILD_NAMES[pr.buildingLevel] : "无建筑"));
-        } else if (pr.regionsOwned > 1) {
-          pr.regionsOwned -= 1;
-          log(room, p.name + " 使用爆破卡，「" + cell.name + "」区域降为 " + pr.regionsOwned + "/" + cell.regionCount);
-        } else {
-          return { error: "该地块无法被爆破" };
-        }
+        if (pr.buildingLevel <= 0) return { error: "脚下地块没有建筑" };
+        const prev = pr.buildingLevel;
+        pr.buildingLevel = 0;
+        log(room, p.name + " 使用爆破卡，「" + cell.name + "」建筑全部归零（原为 " + BUILD_NAMES[prev] + "）");
         break;
       }
       case "remove": {
