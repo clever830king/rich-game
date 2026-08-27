@@ -501,6 +501,12 @@
       const showEnd = isMe() && (room.rolled || cur().skipReason || (room.phase === "landing" && !modalOpen));
       endBtn.classList.toggle("hidden", !showEnd);
     }
+    const aiBtn = $("#btnAiManage");
+    if (aiBtn) {
+      const myP = me();
+      aiBtn.style.background = (myP && myP.aiManaged) ? "#22a06b" : "";
+      aiBtn.style.color = (myP && myP.aiManaged) ? "#fff" : "";
+    }
   }
 
   // 棋盘：23 列 × 10 行。右下=起点A，左下=乔司监狱，左上=起点B，右上=卡牌补给站
@@ -743,13 +749,14 @@
       ));
       card.appendChild(h("div", { class: "pc-money" }, p.bankrupt ? "破产" : "¥" + p.money));
       if (p.cards.length) card.appendChild(h("div", { class: "pc-cards" }, "卡牌 ×" + p.cards.length));
-      if (p.reverse > 0 || p.jailSkip > 0 || p.boss > 0) card.appendChild(h("div", { class: "pc-status" }, statusText(p)));
+      if (p.aiManaged || p.reverse > 0 || p.jailSkip > 0 || p.boss > 0) card.appendChild(h("div", { class: "pc-status" }, statusText(p)));
       card.addEventListener("click", () => playerInfoModal(p));
       box.appendChild(card);
     });
   }
   function statusText(p) {
     const a = [];
+    if (p.aiManaged) a.push("AI托管");
     if (p.reverse > 0) a.push("逆向" + p.reverse + "回合");
     if (p.jailSkip > 0) a.push("监狱");
     if (p.boss > 0) a.push("霸王");
@@ -832,6 +839,15 @@
     saveAndBroadcast();
     render();
   }
+  function toggleAiManage() {
+    if (!S.room || !S.playerId) return;
+    const p = me();
+    if (!p) return;
+    p.aiManaged = !p.aiManaged;
+    saveAndBroadcast();
+    render();
+    toast(p.aiManaged ? "已开启 AI 托管（AI 将替你操作）" : "已取消 AI 托管");
+  }
   function showRules() {
     openModal("游戏规则", h("div", { class: "rules" }, RULES.map(function (t) { return h("p", {}, t); })), [h("button", { class: "btn btn-ghost", onclick: closeModal }, "关闭")]);
   }
@@ -861,7 +877,13 @@
       render();
       return;
     }
-    const shouldAct = cp.isAI ? elapsed > 1200 : (!isOnline(cp) && elapsed > 30000);
+    // 真人 20 秒不动 → 自动进入 AI 托管
+    if (!cp.isAI && !cp.aiManaged && elapsed > 20000) {
+      cp.aiManaged = true;
+      saveAndBroadcast();
+      render();
+    }
+    const shouldAct = (cp.isAI || cp.aiManaged) ? elapsed > 1200 : false;
     if (!shouldAct) return;
     if (S.room.phase === "action" && !S.room.rolled) aiAct();
     else if (S.room.phase === "landing" && S.room.pending) aiResolve();
@@ -980,11 +1002,13 @@
       const card = pend.card;
       const money = cur().money;
       const g = btn("把握机会", () => { sfxCard(); doneLanding({ grasp: true }); });
-      if (money < card.lose) g.disabled = true;
+      if (money < (card.lose || 0)) g.disabled = true;
+      const winText = card.winPct ? "成功得 " + card.winPct + "% 现金" : "成功得 ¥" + (card.win || 0);
+      const loseText = card.losePct ? "失败失 " + card.losePct + "% 现金" : "失败失 ¥" + (card.lose || 0);
       openModal("机会 · " + card.name,
         h("div", {},
           h("div", { class: "big" }, card.name),
-          h("div", { class: "dim" }, card.invest > 0 ? "投资 ¥" + card.invest + "，成功得 ¥" + card.win + "，失败失 ¥" + card.lose : "无需投资，成功得 ¥" + card.win + "，失败失 ¥" + card.lose),
+          h("div", { class: "dim" }, card.invest > 0 ? "投资 ¥" + card.invest + "，" + winText + "，" + loseText : "无需投资，" + winText + "，" + loseText),
           h("div", { class: "dim" }, "机会骰子：奇数失败 / 偶数成功（不影响移动）")
         ),
         [g, btn("放弃机会", () => doneLanding({}), "btn-ghost")]);
@@ -1208,6 +1232,7 @@
       const room = S.room;
       openModal("游戏记录", h("div", { class: "log-list" }, room.log.map(l => h("div", {}, l.text))), [h("button", { class: "btn btn-ghost", onclick: closeModal }, "关闭")]);
     };
+    $("#btnAiManage").onclick = toggleAiManage;
     $("#modalClose").onclick = closeModal;
     $("#modal").addEventListener("click", e => { if (e.target === $("#modal")) closeModal(); });
     $("#setMoney").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.initialMoney = parseInt($("#setMoney").value, 10) || ZT.DEFAULT_MONEY; saveAndBroadcast(); } };
