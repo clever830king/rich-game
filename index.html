@@ -7,6 +7,15 @@
   <title>大富翁之金聪明游浙江</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/latest/cloudbase.full.js"></script>
+  <script>
+    window.addEventListener("error", function (e) {
+      console.error("页面错误", e.message, e.filename, e.lineno);
+      try {
+        var el = document.getElementById("toast");
+        if (el) { el.textContent = "页面出错：" + e.message; el.classList.add("show"); }
+      } catch (err) {}
+    });
+  </script>
 </head>
 <body>
   <div id="home" class="screen">
