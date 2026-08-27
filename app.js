@@ -327,6 +327,7 @@
 
   /* ---------- helpers ---------- */
   function cardName(id) { const c = CARDS.find(x => x.id === id); return c ? c.name : id; }
+  function cardDesc(id) { const c = CARDS.find(x => x.id === id); return c ? c.desc : ""; }
   function playerById(room, id) { return room.players.find(p => p.id === id); }
   function cur() { return S.room.players[S.room.turn]; }
   function me() { return playerById(S.room, S.playerId); }
@@ -1039,7 +1040,10 @@
     p.cards.forEach(id => counts[id] = (counts[id] || 0) + 1);
     const list = Object.keys(counts).map(id => ({ id: id, n: counts[id] }));
     openModal("使用卡牌",
-      h("div", { class: "opt-list" }, list.map(c => h("button", { class: "opt-btn", onclick: () => cardFlow(c.id) }, cardName(c.id) + " ×" + c.n))),
+      h("div", { class: "opt-list" }, list.map(c => h("button", { class: "opt-btn", onclick: () => cardFlow(c.id) },
+        h("div", { class: "card-opt-name" }, cardName(c.id) + " ×" + c.n),
+        h("div", { class: "card-opt-desc" }, cardDesc(c.id))
+      ))),
       [h("button", { class: "btn btn-ghost", onclick: closeModal }, "关闭")]
     );
   }
@@ -1095,14 +1099,31 @@
   function mortgageModal() {
     const room = S.room, p = cur();
     const list = BOARD.filter(c => c.t === "prop" && room.props[c.index].owner === p.id && (room.props[c.index].regionsOwned > 0 || room.props[c.index].buildingLevel > 0));
-    if (!list.length) { toast("没有可抵押的地产"); return; }
-    openModal("抵押地产",
+    const cardCounts = {};
+    p.cards.forEach(id => cardCounts[id] = (cardCounts[id] || 0) + 1);
+    const cardList = Object.keys(cardCounts).map(id => ({ id: id, n: cardCounts[id] }));
+    if (!list.length && !cardList.length) { toast("没有可抵押的地产或卡牌"); return; }
+    const body = h("div", {},
+      list.length ? h("div", { class: "dim", style: { marginBottom: "6px" } }, "抵押地产：") : null,
       h("div", { class: "opt-list" }, list.map(c => h("button", { class: "opt-btn", onclick: () => doMortgage(c.index) }, c.name + " → 抵押得 ¥" + EN.mortgageValue(c, room.props[c.index])))),
+      cardList.length ? h("div", { class: "dim", style: { margin: "10px 0 6px" } }, "抵押卡牌（每张 ¥5000）：") : null,
+      h("div", { class: "opt-list" }, cardList.map(c => h("button", { class: "opt-btn", onclick: () => doMortgageCard(c.id) }, cardName(c.id) + " ×" + c.n + " → 抵押得 ¥5000")))
+    );
+    openModal("抵押",
+      body,
       [h("button", { class: "btn btn-ghost", onclick: closeModal }, "关闭")]
     );
   }
   function doMortgage(idx) {
     const res = EN.mortgage(S.room, S.playerId, idx);
+    if (res.error) { toast(res.error); return; }
+    sfxPay();
+    saveAndBroadcast();
+    closeModal();
+    render();
+  }
+  function doMortgageCard(cardId) {
+    const res = EN.mortgageCard(S.room, S.playerId, cardId);
     if (res.error) { toast(res.error); return; }
     sfxPay();
     saveAndBroadcast();
