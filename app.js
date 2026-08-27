@@ -358,11 +358,13 @@
     const n = tr.seq[BGM.note % tr.seq.length];
     BGM.note++;
     const root = tr.base * Math.pow(2, n / 12);
+    // 低音贝斯（低八度）
+    bgmNote(root / 2, tr.tempo * 2.4);
     // 铺底和弦（根音 + 五度 + 八度），柔和电子氛围
     bgmNote(root, tr.tempo * 2.2);
     bgmNote(root * Math.pow(2, 7 / 12), tr.tempo * 2.2);
     bgmNote(root * 2, tr.tempo * 2.2);
-    // 旋律音（高八度，轻一点）
+    // 旋律音（大三度，轻一点）
     const mel = root * Math.pow(2, 4 / 12);
     bgmNote(mel, tr.tempo);
   }
