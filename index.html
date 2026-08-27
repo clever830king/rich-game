@@ -16,6 +16,10 @@
       <p class="game-sub">多人联机大富翁 · 游历浙江 12 城</p>
       <div class="home-card">
         <label class="field">
+          <span>选择头像</span>
+          <div id="avatarRow" class="avatar-row"></div>
+        </label>
+        <label class="field">
           <span>你的昵称</span>
           <input id="inName" type="text" maxlength="12" placeholder="输入昵称" />
         </label>
@@ -54,10 +58,13 @@
         <label class="set-row"><span>初始资金</span><input id="setMoney" type="number" min="1000" max="100000" step="1000" class="set-input" /></label>
         <label class="set-row"><span>玩家上限</span><select id="setMax" class="set-input"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option></select></label>
         <label class="set-row"><span>开局特殊卡牌</span><select id="setCards" class="set-input"><option selected>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
+        <label class="set-row"><span>同城收益加成</span><select id="setCityBonus" class="set-input"><option value="0.2" selected>+0.2</option><option value="0.3">+0.3</option><option value="0.4">+0.4</option><option value="0.5">+0.5</option></select></label>
+        <label class="set-row"><span>经过起点奖励</span><select id="setStartReward" class="set-input"><option value="3000" selected>¥3000</option><option value="5000">¥5000</option><option value="10000">¥10000</option><option value="2000">¥2000</option></select></label>
+        <label class="set-row"><span>增加电脑玩家</span><select id="setAI" class="set-input"><option value="0" selected>0 个</option><option value="1">1 个</option><option value="2">2 个</option><option value="3">3 个</option><option value="4">4 个</option><option value="5">5 个</option></select></label>
         <label class="set-row"><span>音效</span><select id="setSound" class="set-input"><option value="1" selected>开</option><option value="0">关</option></select></label>
         <label class="set-row"><span>动画速度</span><select id="setAnim" class="set-input"><option value="fast" selected>快</option><option value="normal">正常</option></select></label>
       </div>
-      <button class="btn btn-primary btn-lg btn-block" id="btnStart" disabled>开始游戏（至少 2 人）</button>
+      <button class="btn btn-primary btn-lg btn-block" id="btnStart" disabled>开始游戏</button>
     </div>
   </div>
 
@@ -73,12 +80,27 @@
       <div class="hud-mid">
         <div class="hud-turn" id="hudTurn">—</div>
         <div class="bgm-name" id="bgmName"></div>
+        <div class="hud-newtown" id="hudNewtown"></div>
       </div>
       <button class="btn btn-ghost btn-sm" id="btnEndTurn">结束回合</button>
       <button class="btn btn-ghost btn-sm" id="btnExitGame">退出</button>
     </div>
-    <div id="board" class="board"></div>
+    <div id="boardWrap" class="board-wrap">
+      <div id="board" class="board">
+        <div id="pieceLayer" class="piece-layer"></div>
+      </div>
+    </div>
+    <div id="bigDice" class="big-dice hidden"></div>
+    <div id="bigEvent" class="big-event hidden"></div>
     <div id="players" class="players"></div>
+    <div id="chatPanel" class="chat-panel">
+      <div class="chat-title">💬 聊天室</div>
+      <div id="chatList" class="chat-list"></div>
+      <div class="chat-input-row">
+        <input id="chatInput" type="text" maxlength="120" placeholder="输入聊天内容…" autocomplete="off" />
+        <button class="btn btn-sm" id="btnChatSend">发送</button>
+      </div>
+    </div>
     <div id="actionbar" class="actionbar"></div>
   </div>
 
