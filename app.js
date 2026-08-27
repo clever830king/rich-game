@@ -310,7 +310,7 @@
   function isMe() { return S.room && S.room.status === "playing" && cur() && cur().id === S.playerId; }
   function isMyTurn() { return isMe() && S.room.phase === "action"; }
   function colorOf(p) { const i = S.room.players.indexOf(p); return TOKEN_COLORS[i % TOKEN_COLORS.length]; }
-  function isOnline(p) { if (isLocal()) return true; if (p.id === S.playerId) return true; return (S.seen[p.id] || 0) > Date.now() - 12000; }
+  function isOnline(p) { if (isLocal()) return true; if (p.id === S.playerId) return true; return (S.seen[p.id] || 0) > Date.now() - 45000; }
   function openModal(title, body, foot) {
     $("#modalTitle").textContent = title;
     const b = $("#modalBody"); b.innerHTML = ""; b.appendChild(body);
@@ -619,9 +619,15 @@
   function renderDice() {
     const room = S.room;
     const el = $("#bigDice");
+    const nameEl = $("#bigDiceName");
     if (!el) return;
     if (room.status === "playing" && room.dice) {
       el.classList.remove("hidden");
+      if (nameEl) {
+        nameEl.classList.remove("hidden");
+        const p = cur();
+        nameEl.textContent = (p ? p.token + " " + p.name : "") + " 掷出";
+      }
       if (room.dice !== lastDice) {
         lastDice = room.dice;
         clearInterval(diceTimer);
@@ -642,6 +648,7 @@
       }
     } else {
       el.classList.add("hidden");
+      if (nameEl) nameEl.classList.add("hidden");
       lastDice = null;
       clearInterval(diceTimer);
     }
@@ -781,7 +788,7 @@
   }
   function startAiDriver() {
     if (aiTimer) clearInterval(aiTimer);
-    aiTimer = setInterval(aiTick, 900);
+    aiTimer = setInterval(aiTick, 1400);
   }
   function aiTick() {
     if (!isAiDriver() || !S.room || S.room.status !== "playing") return;
