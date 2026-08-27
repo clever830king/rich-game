@@ -295,6 +295,8 @@ body {
 .opt-list { display: flex; flex-direction: column; gap: 8px; }
 .opt-btn { border: 1.5px solid var(--line); background: #fff; border-radius: 11px; padding: 11px 12px; text-align: left; cursor: pointer; font-size: 14px; }
 .opt-btn:disabled { opacity: .4; }
+.card-opt-name { font-weight: 700; font-size: 14px; }
+.card-opt-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
 .big { font-size: 22px; font-weight: 800; }
 .dim { color: var(--muted); font-size: 13px; }
 .grid-6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
