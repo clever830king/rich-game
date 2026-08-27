@@ -474,7 +474,8 @@
     renderBigEvent();
     const endBtn = $("#endTurnBtn");
     if (endBtn) {
-      const showEnd = isMe() && room.phase === "action" && (room.rolled || cur().skipReason);
+      const modalOpen = !$("#modal").classList.contains("hidden");
+      const showEnd = isMe() && (room.rolled || cur().skipReason || (room.phase === "landing" && !modalOpen));
       endBtn.classList.toggle("hidden", !showEnd);
     }
   }
