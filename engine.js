@@ -282,6 +282,11 @@
     // 普通城市地块
     const pr = room.props[idx];
     if (!pr.owner) {
+      if (pr.buildingLevel > 0) {
+        // 有建筑的空地（破产后保留建筑）：按土地+建筑全价一次性购买
+        const cost = landPaid(cell, pr) + buildPaid(cell, pr);
+        return { type: "buy-whole", cell: idx, price: cost, buildingLevel: pr.buildingLevel };
+      }
       return { type: "buy", cell: idx, price: nextRegionCost(cell, pr) };
     } else if (pr.owner === p.id) {
       if (pr.regionsOwned < cell.regionCount) {
@@ -344,12 +349,12 @@
         finishTurn(room); break;
       case "buy":
         resolveBuy(room, action); break;
+      case "buy-whole":
+        resolveBuyWhole(room, action); break;
       case "build":
         resolveBuild(room, action); break;
       case "pay":
         resolvePay(room, action); break;
-      case "emergency":
-        resolveEmergency(room, action); break;
       case "opportunity":
         resolveOpportunity(room, action); break;
       case "opportunity_result":
@@ -371,6 +376,21 @@
         pr.regionsOwned += 1;
         pr.owner = p.id;
         log(room, p.name + " 购买「" + cell.name + "」区域" + pr.regionsOwned + "/" + cell.regionCount + "，花费 ¥" + cost);
+      }
+    }
+    finishTurn(room);
+  }
+
+  function resolveBuyWhole(room, action) {
+    const p = currentPlayer(room);
+    const pend = room.pending;
+    const cell = BOARD[pend.cell];
+    const pr = room.props[pend.cell];
+    if (action.buy) {
+      if (p.money >= pend.price) {
+        p.money -= pend.price;
+        pr.owner = p.id; // 接管整块带建筑的空地，保留建筑和区域
+        log(room, p.name + " 购买带建筑的空地「" + cell.name + "」，花费 ¥" + pend.price);
       }
     }
     finishTurn(room);
@@ -408,10 +428,8 @@
       log(room, p.name + " 支付 ¥" + pend.toll + " 给 " + (owner ? owner.name : "银行"));
       finishTurn(room);
     } else {
-      pend.type = "emergency";
-      pend.shortfall = pend.toll - p.money;
-      pend.creditor = pend.owner;
-      room.seq++;
+      log(room, p.name + " 资金不足，无法支付 ¥" + pend.toll + "，破产！");
+      bankrupt(room);
     }
   }
 
@@ -492,10 +510,10 @@
     BOARD.forEach(function (c) {
       if (c.t === "prop") {
         const pr = room.props[c.index];
-        if (pr && pr.owner === p.id) { pr.owner = null; pr.regionsOwned = 0; pr.buildingLevel = 0; }
+        if (pr && pr.owner === p.id) { pr.owner = null; }
       }
     });
-    log(room, p.name + " 破产，退出游戏");
+    log(room, p.name + " 破产，退出游戏（其地产变为空地，建筑保留）");
     room.pending = null;
     checkWin(room);
     if (!room.winner) endTurn(room);
