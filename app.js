@@ -856,6 +856,7 @@
     let action = {};
     switch (pend.type) {
       case "buy": action = { buy: p.money >= pend.price }; break;
+      case "buy-whole": action = { buy: p.money >= pend.price }; break;
       case "build":
         if (pend.cost2 != null && p.money >= pend.cost2) action = { levels: 2 };
         else if (pend.cost1 != null && p.money >= pend.cost1) action = { levels: 1 };
@@ -863,11 +864,6 @@
         break;
       case "pay": action = (pend.canBoss && p.boss > 0) ? { boss: true } : {}; break;
       case "opportunity": action = { grasp: p.money >= pend.card.lose && Math.random() < 0.5 }; break;
-      case "emergency": {
-        const list = BOARD.filter(c => c.t === "prop" && S.room.props[c.index].owner === p.id && (S.room.props[c.index].regionsOwned > 0 || S.room.props[c.index].buildingLevel > 0));
-        action = list.length ? { mortgage: list[0].index } : { bankrupt: true };
-        break;
-      }
       default: action = {}; break;
     }
     EN.resolve(S.room, action);
@@ -921,6 +917,19 @@
       openModal("购买区域", body, [b, btn("跳过", () => doneLanding({}), "btn-ghost")]);
       return;
     }
+    if (pend.type === "buy-whole") {
+      const money = cur().money;
+      const pr = room.props[pend.cell];
+      const body = h("div", {},
+        h("div", { class: "big" }, cell.name),
+        h("div", { class: "dim" }, "带建筑的空地（" + ZT.BUILD_NAMES[pr.buildingLevel] + "），一次性购买土地和建筑"),
+        h("div", { class: "dim" }, "你的资金 ¥" + money)
+      );
+      const b = btn("购买 ¥" + pend.price, () => { sfxBuy(); doneLanding({ buy: true }); });
+      if (pend.price > money) b.disabled = true;
+      openModal("购买带建筑的地块", body, [b, btn("跳过", () => doneLanding({}), "btn-ghost")]);
+      return;
+    }
     if (pend.type === "build") {
       const pr = room.props[pend.cell];
       const money = cur().money;
@@ -972,22 +981,7 @@
         foot);
       return;
     }
-    if (pend.type === "emergency") { emergencyModal(pend); return; }
     landingMsg = "本回合结算完成";
-  }
-
-  function emergencyModal(pend) {
-    const room = S.room, p = cur();
-    const list = BOARD.filter(c => c.t === "prop" && room.props[c.index].owner === p.id && (room.props[c.index].regionsOwned > 0 || room.props[c.index].buildingLevel > 0));
-    const body = h("div", {},
-      h("div", { class: "big" }, "还差 ¥" + Math.max(0, pend.shortfall)),
-      list.length ? h("div", {},
-        h("div", { class: "dim" }, "请选择要抵押的地块凑钱："),
-        h("div", { class: "opt-list" }, list.map(c => h("button", { class: "opt-btn", onclick: () => { sfxPay(); doneLanding({ mortgage: c.index }); } }, c.name + " → 抵押得 ¥" + EN.mortgageValue(c, room.props[c.index]))))
-      ) : h("div", { class: "dim" }, "你已经没有可抵押的地块了。")
-    );
-    const foot = list.length ? [] : [h("button", { class: "btn btn-danger", onclick: () => doneLanding({ bankrupt: true }) }, "破产退出")];
-    openModal("资金不足", body, foot);
   }
 
   /* ---------- cards ---------- */
