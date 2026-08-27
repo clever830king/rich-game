@@ -51,7 +51,7 @@
   // type: stop / money（amount 正=获得，负=损失）/ back3 / gainCard / loseCard
   const FATE = [
     { name: "梅雨季来了", type: "stop", desc: "连续阴雨打乱行程，暂停 1 回合" },
-    { name: "杭州炒房失败", type: "money", amount: -2500, desc: "高价投资房产失败，损失 ¥2500" },
+    { name: "杭州炒房失败", type: "moneyPct", pct: -10, desc: "高价投资房产失败，损失 10% 现金" },
     { name: "舟山台风", type: "money", amount: -1500, desc: "港口关闭，损失 ¥1500" },
     { name: "雁荡山封路", type: "back3", desc: "景区封路，向后移动 3 格" },
     { name: "绍兴黄酒破损", type: "money", amount: -1200, desc: "运输破损，损失 ¥1200" },
@@ -63,7 +63,13 @@
     { name: "乌镇拾得卡包", type: "gainCard", desc: "在乌镇偶得一张特殊卡牌" },
     { name: "绍兴行李丢失", type: "loseCard", fallback: -800, desc: "行李丢失，随机失去一张卡牌" },
     { name: "义乌赠品卡", type: "gainCard", desc: "收到义乌商户赠卡一张" },
-    { name: "台风卷走卡牌", type: "loseCard", fallback: -1000, desc: "台风卷走一张卡牌" }
+    { name: "台风卷走卡牌", type: "loseCard", fallback: -1000, desc: "台风卷走一张卡牌" },
+    { name: "西湖游船补贴", type: "moneyPct", pct: 5, desc: "西湖游船生意兴隆，获得 5% 现金" },
+    { name: "莫干山民宿分红", type: "moneyPct", pct: 10, desc: "莫干山民宿分红，获得 10% 现金" },
+    { name: "温州炒房被套", type: "moneyPct", pct: -5, desc: "温州炒房被套，损失 5% 现金" },
+    { name: "金华火腿滞销", type: "money", amount: -800, desc: "金华火腿滞销，损失 ¥800" },
+    { name: "衢州柑橘丰收", type: "money", amount: 600, desc: "衢州柑橘丰收，获得 ¥600" },
+    { name: "丽水山货热卖", type: "money", amount: 700, desc: "丽水山货热卖，获得 ¥700" }
   ];
 
   // ===== 机会（把握/放弃 + 机会骰子：奇数失败、偶数成功）=====
@@ -81,7 +87,15 @@
     { name: "丽水旅游开发", invest: 1000, win: 2500, lose: 1000 },
     { name: "浙江创业大奖", invest: 2000, win: 5000, lose: 2000 },
     { name: "卡牌商人进货", invest: 500, win: 1200, lose: 500, winCard: 1 },
-    { name: "神秘卡包", invest: 800, win: 1000, lose: 800, winCard: 2, loseCard: 1 }
+    { name: "神秘卡包", invest: 800, win: 1000, lose: 800, winCard: 2, loseCard: 1 },
+    { name: "西湖龙井茶庄", invest: 1000, winPct: 10, lose: 1000 },
+    { name: "乌镇民宿投资", invest: 1500, win: 3000, losePct: 5 },
+    { name: "宁波舟山港物流", invest: 1200, winPct: 10, lose: 1200 },
+    { name: "温州鞋厂订单", invest: 800, win: 2000, losePct: 5 },
+    { name: "台州模具厂", invest: 1000, winPct: 10, lose: 800 },
+    { name: "湖州丝绸外贸", invest: 1200, win: 2800, lose: 1200, winCard: 1 },
+    { name: "金华火腿电商", invest: 600, winPct: 10, lose: 600 },
+    { name: "丽水山货直播", invest: 500, winPct: 10, lose: 500, winCard: 1 }
   ];
 
   // ===== 地图：62 格（50 城市地块 + 12 功能格）=====
@@ -104,7 +118,7 @@
     { t: "prop", city: "绍兴", name: "上虞", regions: ["上虞"], gdp: 1463.61 },
     { t: "prop", city: "绍兴", name: "嵊州·新昌", regions: ["嵊州", "新昌"], gdp: 1564.91 },
     { t: "prop", city: "绍兴", name: "诸暨", regions: ["诸暨"], gdp: 2002.60 },
-    { t: "fate", name: "命运" },
+    { t: "opportunity", name: "机会" },
     { t: "prop", city: "杭州", name: "萧山·滨江", regions: ["萧山", "滨江"], gdp: 5543.94 },
     { t: "prop", city: "杭州", name: "杭州市区", regions: ["杭州市区"], gdp: 9114.18, composition: "上城+拱墅+西湖+钱塘" },
     { t: "prop", city: "杭州", name: "余杭·临平", regions: ["余杭", "临平"], gdp: 4784.34 },
