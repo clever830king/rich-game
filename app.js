@@ -405,23 +405,6 @@
       row.appendChild(h("button", { class: "avatar-btn" + (t === SEL_TOKEN ? " sel" : ""), onclick: function () { SEL_TOKEN = t; renderAvatarRow(); } }, t));
     });
   }
-  function renderRoomAvatars() {
-    const row = $("#roomAvatarRow");
-    if (!row) return;
-    row.innerHTML = "";
-    const meP = me();
-    (EN.TOKENS || ["🎩"]).forEach(function (t) {
-      row.appendChild(h("button", { class: "avatar-btn" + (meP && meP.token === t ? " sel" : ""), onclick: function () { changeAvatar(t); } }, t));
-    });
-  }
-  function changeAvatar(t) {
-    const p = me();
-    if (!p) return;
-    p.token = t;
-    SEL_TOKEN = t;
-    saveAndBroadcast();
-    renderRoomAvatars();
-  }
   function readSession() { try { return JSON.parse(localStorage.getItem(LS_SESSION)); } catch (e) { return null; } }
   function checkReconnect() {
     const sess = readSession();
@@ -459,7 +442,6 @@
     $("#setAI").value = String(room.settings.aiCount);
     $("#setSound").value = room.settings.sound ? "1" : "0";
     $("#setAnim").value = room.settings.anim;
-    renderRoomAvatars();
     $("#btnStart").disabled = !(isHost && (room.players.length + (room.settings.aiCount || 0)) >= 2);
   }
 
@@ -468,7 +450,6 @@
     const room = S.room;
     $("#hudCode").textContent = room.code;
     $("#btnSound").textContent = room.settings.sound ? "🔊" : "🔇";
-    $("#btnEndTurn").disabled = !isMe();
     const turnEl = $("#hudTurn");
     if (room.status === "ended") {
       turnEl.textContent = "🏆 " + (playerById(room, room.winner) || {}).name + " 获胜";
