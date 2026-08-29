@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   "use strict";
 
   const ZT = window.ZT;
@@ -53,7 +53,7 @@
       settings: {
         initialMoney: clamp(parseInt(settings.initialMoney, 10) || ZT.DEFAULT_MONEY, 1000, 100000),
         maxPlayers: clamp(parseInt(settings.maxPlayers, 10) || 6, 2, 6),
-        startCards: clamp(parseInt(settings.startCards, 10) || 0, 0, 5),
+        startCards: clamp(parseInt(settings.startCards, 10) || 0, 0, 6),
         cityBonusStep: [0.2, 0.3, 0.4, 0.5].indexOf(parseFloat(settings.cityBonusStep)) >= 0 ? parseFloat(settings.cityBonusStep) : 0.2,
         startReward: clamp(parseInt(settings.startReward, 10) || START_REWARD, 0, 100000),
         aiCount: clamp(parseInt(settings.aiCount, 10) || 0, 0, 5),
@@ -66,6 +66,7 @@
       rolled: false,
       turnStartedAt: 0,
       landingStartedAt: 0,
+      lastActionAt: 0,
       phase: "waiting",
       pending: null,
       pendingCheat: null,
@@ -155,6 +156,7 @@
     room.rolled = false;
     room.turnStartedAt = Date.now();
     room.landingStartedAt = 0;
+    room.lastActionAt = Date.now();
     room.seq++;
     log(room, "游戏开始！每人初始资金 ¥" + room.settings.initialMoney);
     if (aiCount > 0) log(room, "已加入 " + aiCount + " 名 AI 玩家");
@@ -558,6 +560,7 @@
       p.skipReason = null;
       room.rolled = false;
       room.turnStartedAt = Date.now();
+      room.lastActionAt = Date.now();
       log(room, "轮到 " + p.name);
       room.seq++;
       return;
