@@ -487,7 +487,7 @@
     renderPieces();
     renderPlayers();
     renderChat();
-    if (isMe() && room.phase === "landing" && room.pending) {
+    if (isMe() && !(me() && me().aiManaged) && room.phase === "landing" && room.pending) {
       scheduleLanding();
     } else {
       landingKey = null;
@@ -496,10 +496,11 @@
     renderActionBar();
     renderDice();
     renderBigEvent();
+    renderTurnTimer();
     const endBtn = $("#endTurnBtn");
     if (endBtn) {
       const modalOpen = !$("#modal").classList.contains("hidden");
-      const showEnd = isMe() && (room.rolled || cur().skipReason || (room.phase === "landing" && !modalOpen));
+      const showEnd = isMe() && !(me() && me().aiManaged) && (room.rolled || cur().skipReason || (room.phase === "landing" && !modalOpen));
       endBtn.classList.toggle("hidden", !showEnd);
     }
     const aiBtn = $("#btnAiManage");
@@ -737,6 +738,26 @@
     el.classList.add("hidden");
   }
 
+  // 回合倒计时 / AI托管中 提示（棋盘中央上方，所有人可见）
+  function renderTurnTimer() {
+    const el = $("#turnTimer");
+    if (!el) return;
+    const room = S.room;
+    if (!room || room.status !== "playing") { el.classList.add("hidden"); return; }
+    const p = cur();
+    if (!p || p.bankrupt) { el.classList.add("hidden"); return; }
+    if (p.isAI || p.aiManaged) {
+      el.textContent = "🤖 " + p.name + " AI托管中";
+      el.className = "turn-timer managed";
+      el.classList.remove("hidden");
+      return;
+    }
+    const remain = Math.max(0, Math.ceil(25 - (Date.now() - (room.lastActionAt || 0)) / 1000));
+    el.textContent = p.name + " 剩余操作时间 " + remain + " 秒";
+    el.className = "turn-timer" + (remain <= 5 ? " urgent" : "");
+    el.classList.remove("hidden");
+  }
+
   function renderPlayers() {
     const room = S.room;
     const box = $("#players");
@@ -801,6 +822,10 @@
       box.appendChild(h("div", { class: "ab-hint" }, "等待 " + cur().name + " 操作…"));
       return;
     }
+    if (me() && me().aiManaged) {
+      box.appendChild(h("div", { class: "ab-hint" }, "🤖 AI 托管中，AI 正在替你操作（点击左上角可取消）"));
+      return;
+    }
     if (room.phase === "landing") {
       box.appendChild(h("div", { class: "ab-hint" }, "结算中…"));
       return;
@@ -834,6 +859,7 @@
   }
   function endTurnNow() {
     if (!isMe()) { toast("还没轮到你"); return; }
+    markActivity();
     EN.endTurn(S.room);
     landingMsg = null;
     closeModal();
@@ -845,9 +871,20 @@
     const p = me();
     if (!p) return;
     p.aiManaged = !p.aiManaged;
+    S.room.lastActionAt = Date.now();
     saveAndBroadcast();
     render();
     toast(p.aiManaged ? "已开启 AI 托管（AI 将替你操作）" : "已取消 AI 托管");
+  }
+  // 玩家任何操作都视为活动：重置倒计时，并自动退出 AI 托管
+  function markActivity() {
+    if (!S.room) return;
+    S.room.lastActionAt = Date.now();
+    const p = me();
+    if (p && p.aiManaged) {
+      p.aiManaged = false;
+      toast("已退出 AI 托管");
+    }
   }
   function showRules() {
     openModal("游戏规则", h("div", { class: "rules" }, RULES.map(function (t) { return h("p", {}, t); })), [h("button", { class: "btn btn-ghost", onclick: closeModal }, "关闭")]);
@@ -870,16 +907,9 @@
     const cp = cur();
     if (!cp || cp.bankrupt) return;
     const elapsed = Date.now() - (S.room.turnStartedAt || 0);
-    const landingElapsed = Date.now() - (S.room.landingStartedAt || 0);
-    // 卡在结算中超过 10 秒：自动跳过，避免卡死
-    if (S.room.phase === "landing" && landingElapsed > 10000) {
-      EN.forceEndTurn(S.room);
-      saveAndBroadcast();
-      render();
-      return;
-    }
-    // 真人 20 秒不动 → 自动进入 AI 托管
-    if (!cp.isAI && !cp.aiManaged && elapsed > 20000) {
+    const idleElapsed = Date.now() - (S.room.lastActionAt || 0);
+    // 真人 25 秒无操作 → 自动进入 AI 托管
+    if (!cp.isAI && !cp.aiManaged && idleElapsed > 25000) {
       cp.aiManaged = true;
       saveAndBroadcast();
       render();
@@ -921,6 +951,7 @@
   function onRoll() {
     const room = S.room;
     if (!isMyTurn()) return;
+    markActivity();
     sfxRoll();
     EN.roll(room);
     saveAndBroadcast();
@@ -928,6 +959,7 @@
   }
   function doneLanding(action) {
     const room = S.room;
+    markActivity();
     if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
     EN.resolve(room, action || {});
     saveAndBroadcast();
@@ -1087,6 +1119,7 @@
     doCard(cardId, {});
   }
   function doCard(cardId, opts) {
+    markActivity();
     const res = EN.useCard(S.room, S.playerId, cardId, opts || {});
     if (res.error) { toast(res.error); return; }
     sfxCard();
@@ -1115,6 +1148,7 @@
     );
   }
   function doMortgage(idx) {
+    markActivity();
     const res = EN.mortgage(S.room, S.playerId, idx);
     if (res.error) { toast(res.error); return; }
     sfxPay();
@@ -1123,6 +1157,7 @@
     render();
   }
   function doMortgageCard(cardId) {
+    markActivity();
     const res = EN.mortgageCard(S.room, S.playerId, cardId);
     if (res.error) { toast(res.error); return; }
     sfxPay();
@@ -1258,6 +1293,7 @@
     $("#modal").addEventListener("click", e => { if (e.target === $("#modal")) closeModal(); });
     $("#setMoney").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.initialMoney = parseInt($("#setMoney").value, 10) || ZT.DEFAULT_MONEY; saveAndBroadcast(); } };
     $("#setMax").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.maxPlayers = parseInt($("#setMax").value, 10) || 6; saveAndBroadcast(); } };
+    $("#setCards").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.startCards = parseInt($("#setCards").value, 10) || 0; saveAndBroadcast(); } };
     $("#setCityBonus").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.cityBonusStep = parseFloat($("#setCityBonus").value) || 0.2; saveAndBroadcast(); } };
     $("#setStartReward").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.startReward = parseInt($("#setStartReward").value, 10) || ZT.START_REWARD; saveAndBroadcast(); } };
     $("#setAI").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.aiCount = parseInt($("#setAI").value, 10) || 0; S.room.seq++; saveAndBroadcast(); render(); } };
@@ -1270,6 +1306,7 @@
   startAiDriver();
   setInterval(refreshPresence, 6000);
   setInterval(function () { sceneIdx++; if (S.room && S.room.status === "playing") renderScenery(); }, 60000);
+  setInterval(renderTurnTimer, 1000);
   setInterval(function () { if (S.code && CLOUD_DB && S.room) pullRoom(); }, 3000);
 
   initCloud().then(function () { console.log("CloudBase 已连接"); checkReconnect(); }).catch(function (e) { console.warn("CloudBase 初始化失败", e); toast("联机服务连接失败，请检查网络或稍后重试"); });
