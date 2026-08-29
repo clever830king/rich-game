@@ -506,8 +506,10 @@
     const aiBtn = $("#btnAiManage");
     if (aiBtn) {
       const myP = me();
-      aiBtn.style.background = (myP && myP.aiManaged) ? "#22a06b" : "";
-      aiBtn.style.color = (myP && myP.aiManaged) ? "#fff" : "";
+      const managed = myP && myP.aiManaged;
+      aiBtn.textContent = managed ? "🙋取消托管" : "🤖托管";
+      aiBtn.style.background = managed ? "#22a06b" : "";
+      aiBtn.style.color = managed ? "#fff" : "";
     }
   }
 
@@ -872,6 +874,7 @@
     if (!p) return;
     p.aiManaged = !p.aiManaged;
     S.room.lastActionAt = Date.now();
+    S.room.seq++;
     saveAndBroadcast();
     render();
     toast(p.aiManaged ? "已开启 AI 托管（AI 将替你操作）" : "已取消 AI 托管");
@@ -880,6 +883,7 @@
   function markActivity() {
     if (!S.room) return;
     S.room.lastActionAt = Date.now();
+    S.room.seq++;
     const p = me();
     if (p && p.aiManaged) {
       p.aiManaged = false;
@@ -911,6 +915,7 @@
     // 真人 25 秒无操作 → 自动进入 AI 托管
     if (!cp.isAI && !cp.aiManaged && idleElapsed > 25000) {
       cp.aiManaged = true;
+      S.room.seq++;
       saveAndBroadcast();
       render();
     }
