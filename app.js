@@ -1263,6 +1263,17 @@
     if (c.t === "prop") {
       html += "<div class='dim'>区域 " + (pr.regionsOwned || 0) + "/" + c.regionCount + " · GDP " + c.gdp + " 亿元 · 第" + (c.tier + 1) + "档</div>";
       if (c.composition) html += "<div class='dim'>" + c.composition + "</div>";
+      if (c.regionGdps && c.regionCount >= 2) {
+        html += "<div class='dim'>GDP 分列：" + c.regions.map(function (r, i) { return r + " " + c.regionGdps[i] + " 亿"; }).join(" · ") + " · 合计 " + c.gdp + " 亿</div>";
+      }
+      const earn = EN.plotEarnings(room, c.index);
+      if (earn.total > 0) {
+        html += "<div class='dim'>该地块累计收租 ¥" + earn.total + "</div>";
+        Object.keys(earn.byPayer).forEach(function (pid) {
+          const payer = playerById(room, pid);
+          html += "<div class='dim'>　· 从 " + (payer ? payer.name : "?") + " 收 ¥" + earn.byPayer[pid] + "</div>";
+        });
+      }
       if (pr.owner) {
         const owner = playerById(room, pr.owner);
         html += "<div class='dim'>所有者：" + (owner ? owner.name : "?") + "，建筑：" + (ZT.BUILD_NAMES[pr.buildingLevel] || "无") + "</div>";
@@ -1285,9 +1296,16 @@
   function playerInfoModal(p) {
     const room = S.room;
     const props = BOARD.filter(c => c.t === "prop" && room.props[c.index].owner === p.id);
+    const net = EN.playerNet(room, p.id);
+    const netList = Object.keys(net).map(function (pid) {
+      const op = playerById(room, pid);
+      const v = net[pid];
+      return (op ? op.name : "?") + (v >= 0 ? "：赚 ¥" + v : "：亏 ¥" + (-v));
+    });
     const body = h("div", {},
       h("div", { class: "big" }, p.token + " " + p.name),
       h("div", { class: "dim" }, "资金 ¥" + p.money + " · 卡牌 ×" + p.cards.length),
+      netList.length ? h("div", { class: "opt-list", style: { marginTop: "10px" } }, netList.map(function (t) { return h("div", { class: "dim" }, t); })) : null,
       h("div", { class: "opt-list", style: { marginTop: "10px" } }, props.length ? props.map(c => h("div", { class: "dim" }, c.name + " " + (room.props[c.index].regionsOwned) + "/" + c.regionCount + (room.props[c.index].buildingLevel ? " " + ZT.BUILD_NAMES[room.props[c.index].buildingLevel] : ""))) : h("div", { class: "dim" }, "暂无地产"))
     );
     openModal("玩家信息", body, [h("button", { class: "btn btn-ghost", onclick: closeModal }, "关闭")]);
