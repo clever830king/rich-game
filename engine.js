@@ -75,6 +75,7 @@
       jailRoll: null,
       log: [],
       chat: [],
+      ledger: [],
       winner: null,
       seq: 0
     };
@@ -448,6 +449,7 @@
     if (p.money >= pend.toll) {
       p.money -= pend.toll;
       if (owner) owner.money += pend.toll;
+      if (pend.owner) room.ledger.push({ from: p.id, to: pend.owner, amount: pend.toll, cell: pend.cell, t: Date.now() });
       log(room, p.name + " 支付 ¥" + pend.toll + " 给 " + (owner ? owner.name : "银行"));
       finishTurn(room);
     } else {
@@ -475,6 +477,7 @@
         p.money -= pend.toll;
         const owner = playerById(room, pend.creditor);
         if (owner) owner.money += pend.toll;
+        if (pend.creditor) room.ledger.push({ from: p.id, to: pend.creditor, amount: pend.toll, cell: pend.cell, t: Date.now() });
         log(room, p.name + " 支付 ¥" + pend.toll + " 给 " + (owner ? owner.name : "银行"));
         room.pending = null;
         finishTurn(room);
@@ -495,6 +498,7 @@
         p.money -= pend.toll;
         const owner = playerById(room, pend.creditor);
         if (owner) owner.money += pend.toll;
+        if (pend.creditor) room.ledger.push({ from: p.id, to: pend.creditor, amount: pend.toll, cell: pend.cell, t: Date.now() });
         log(room, p.name + " 支付 ¥" + pend.toll + " 给 " + (owner ? owner.name : "银行"));
         room.pending = null;
         finishTurn(room);
@@ -857,6 +861,27 @@
     return null;
   }
 
+  // 地块盈利统计 + 玩家盈亏
+  function plotEarnings(room, cellIndex) {
+    let total = 0;
+    const byPayer = {};
+    (room.ledger || []).forEach(function (l) {
+      if (l.cell === cellIndex) {
+        total += l.amount;
+        byPayer[l.from] = (byPayer[l.from] || 0) + l.amount;
+      }
+    });
+    return { total: total, byPayer: byPayer };
+  }
+  function playerNet(room, playerId) {
+    const net = {};
+    (room.ledger || []).forEach(function (l) {
+      if (l.from === playerId) net[l.to] = (net[l.to] || 0) - l.amount;
+      if (l.to === playerId) net[l.from] = (net[l.from] || 0) + l.amount;
+    });
+    return net;
+  }
+
   window.ZTEngine = {
     N: N,
     uid: uid,
@@ -883,6 +908,8 @@
     newTownMultiplier: newTownMultiplier,
     mortgageValue: mortgageValue,
     nextRegionCost: nextRegionCost,
+    plotEarnings: plotEarnings,
+    playerNet: playerNet,
     BUILD_NAMES: BUILD_NAMES,
     CARDS: CARDS,
     TOKENS: TOKENS
