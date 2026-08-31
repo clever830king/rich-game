@@ -221,19 +221,19 @@ body {
 
 /* 回合倒计时 / AI托管提示 */
 .turn-timer {
-  position: fixed; top: 56px; left: 50%; transform: translateX(-50%);
-  background: rgba(255,255,255,.94); color: #25302b; padding: 8px 18px; border-radius: 20px;
-  font-size: 15px; font-weight: 800; z-index: 42; pointer-events: none; white-space: nowrap;
-  box-shadow: 0 4px 16px rgba(0,0,0,.16); border: 1px solid #eee;
+  margin-bottom: 6px;
+  background: rgba(255,255,255,.9); color: #25302b; padding: 5px 14px; border-radius: 16px;
+  font-size: 14px; font-weight: 800; pointer-events: none; white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12); border: 1px solid #eee;
 }
 .turn-timer.urgent { color: #c0392b; border-color: #f3b9b4; }
 .turn-timer.managed {
-  background: #f43f5e; color: #fff; font-size: 18px; padding: 10px 24px;
+  background: #f43f5e; color: #fff; font-size: 16px; padding: 7px 18px;
   border: none; animation: turnTimerPulse 1.2s ease-in-out infinite;
 }
 @keyframes turnTimerPulse {
-  0%, 100% { transform: translateX(-50%) scale(1); }
-  50% { transform: translateX(-50%) scale(1.06); }
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
 }
 @keyframes diceShake {
   0% { transform: translate(-50%,-50%) rotate(0deg) scale(1); }
