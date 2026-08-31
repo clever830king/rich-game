@@ -537,6 +537,7 @@
       box.appendChild(pieceLayer);
     }
     box.appendChild(h("div", { class: "board-center" },
+      h("div", { class: "turn-timer hidden", id: "turnTimer" }),
       h("div", { class: "board-center-title" }, "大富翁之"),
       h("div", { class: "board-center-title" }, "金聪明游浙江"),
       h("div", { class: "board-center-sub" }, "游历浙江 12 城"),
@@ -1089,6 +1090,17 @@
       const body = h("div", {}, h("div", { class: "dim", style: { marginBottom: "10px" } }, "选择本回合骰子点数"), h("div", { class: "grid-6" }));
       for (let v = 1; v <= 12; v++) body.lastChild.appendChild(h("button", { class: "die-btn", onclick: () => doCard(cardId, { value: v }) }, "" + v));
       openModal("作弊卡", body, [h("button", { class: "btn btn-ghost", onclick: cardsModal }, "返回")]);
+      return;
+    }
+    if (cardId === "reverse") {
+      const room = S.room;
+      const targets = room.players.filter(p => !p.bankrupt);
+      openModal("逆向卡 · 选择目标（可指定自己或别人）",
+        h("div", { class: "opt-list" }, targets.map(p => h("button", { class: "opt-btn", onclick: () => doCard(cardId, { target: p.id }) },
+          p.token + " " + p.name + (p.id === S.playerId ? "（自己）" : "")
+        ))),
+        [h("button", { class: "btn btn-ghost", onclick: cardsModal }, "返回")]
+      );
       return;
     }
     if (cardId === "remove") {
