@@ -67,6 +67,7 @@
       turnStartedAt: 0,
       landingStartedAt: 0,
       lastActionAt: 0,
+      round: 0,
       phase: "waiting",
       pending: null,
       pendingCheat: null,
@@ -154,6 +155,7 @@
     room.phase = "action";
     room.turn = 0;
     room.rolled = false;
+    room.round = 1;
     room.turnStartedAt = Date.now();
     room.landingStartedAt = 0;
     room.lastActionAt = Date.now();
@@ -277,8 +279,10 @@
     if (cell.t === "fate") {
       const card = rand(ZT.FATE);
       const r = applyFate(room, p, card);
-      log(room, p.name + " 抽到命运「" + card.name + "」：" + r);
-      return { type: "fate", card: card, result: r };
+      const fd = die(); // 命运骰子（动画）
+      room.dice = fd;
+      log(room, p.name + " 抽到命运「" + card.name + "」：" + r.pub);
+      return { type: "fate", card: card, result: r.pri, die: fd };
     }
     if (cell.t === "opportunity") {
       const card = rand(ZT.OPPORTUNITY);
@@ -313,36 +317,43 @@
 
   function applyFate(room, p, card) {
     let desc = card.desc || card.name;
+    let pub = desc, pri = desc;
     if (card.type === "stop") {
       p.paused += 1; // 命运“暂停一回合”
       desc = "暂停 1 回合";
+      pub = pri = desc;
     } else if (card.type === "money") {
       p.money = Math.max(0, p.money + card.amount);
       desc = (card.amount >= 0 ? "获得 ¥" + card.amount : "损失 ¥" + (-card.amount));
+      pub = pri = desc;
     } else if (card.type === "moneyPct") {
       const delta = Math.round(p.money * card.pct / 100);
       p.money = Math.max(0, p.money + delta);
       desc = (delta >= 0 ? "获得 ¥" + delta + "（" + card.pct + "%）" : "损失 ¥" + (-delta) + "（" + Math.abs(card.pct) + "%）");
+      pub = pri = desc;
     } else if (card.type === "back3") {
       const mv = moveBy(room, p, 3, true);
       desc = "向后移动 3 格";
       if (mv.reward) desc += "（经过起点 +¥" + mv.reward + "）";
+      pub = pri = desc;
     } else if (card.type === "gainCard") {
       const cid = randomCardId();
       p.cards.push(cid);
-      desc = "获得一张【" + cardName(cid) + "】";
+      pub = "获得一张卡片";
+      pri = "获得一张【" + cardName(cid) + "】";
     } else if (card.type === "loseCard") {
       if (p.cards.length) {
         const idx = Math.floor(Math.random() * p.cards.length);
         const lost = p.cards.splice(idx, 1)[0];
-        desc = "失去一张【" + cardName(lost) + "】";
+        pub = "失去一张卡片";
+        pri = "失去一张【" + cardName(lost) + "】";
       } else {
         const fb = card.fallback || -800;
         p.money = Math.max(0, p.money + fb);
-        desc = "没有卡牌可失去，改为损失 ¥" + (-fb);
+        pub = pri = "没有卡牌可失去，改为损失 ¥" + (-fb);
       }
     }
-    return desc;
+    return { pub: pub, pri: pri };
   }
 
   // ===== 结算 =====
@@ -365,6 +376,8 @@
         resolveBuild(room, action); break;
       case "pay":
         resolvePay(room, action); break;
+      case "emergency":
+        resolveEmergency(room, action); break;
       case "opportunity":
         resolveOpportunity(room, action); break;
       case "opportunity_result":
@@ -438,8 +451,10 @@
       log(room, p.name + " 支付 ¥" + pend.toll + " 给 " + (owner ? owner.name : "银行"));
       finishTurn(room);
     } else {
-      log(room, p.name + " 资金不足，无法支付 ¥" + pend.toll + "，破产！");
-      bankrupt(room);
+      pend.type = "emergency";
+      pend.shortfall = pend.toll - p.money;
+      pend.creditor = pend.owner;
+      room.seq++;
     }
   }
 
@@ -468,6 +483,26 @@
       }
       return;
     }
+    if (action.mortgageCard != null) {
+      const ci = p.cards.indexOf(action.mortgageCard);
+      if (ci >= 0) {
+        p.cards.splice(ci, 1);
+        p.money += 5000;
+        pend.shortfall -= 5000;
+        log(room, p.name + " 紧急抵押一张卡，获得 ¥5000");
+      }
+      if (pend.shortfall <= 0) {
+        p.money -= pend.toll;
+        const owner = playerById(room, pend.creditor);
+        if (owner) owner.money += pend.toll;
+        log(room, p.name + " 支付 ¥" + pend.toll + " 给 " + (owner ? owner.name : "银行"));
+        room.pending = null;
+        finishTurn(room);
+      } else {
+        room.seq++;
+      }
+      return;
+    }
     if (action.bankrupt) { bankrupt(room); return; }
   }
 
@@ -481,15 +516,17 @@
         finishTurn(room); return;
       }
       const d = die();
+      room.dice = d; // 机会骰子动画
       const success = d % 2 === 0;
-      let delta = 0, extra = "";
+      let delta = 0, extraPub = "", extraPri = "";
       if (success) {
         delta = card.winPct ? Math.round(p.money * card.winPct / 100) - card.invest : (card.win - card.invest);
         p.money += delta;
         if (card.winCard) {
           const ids = [];
           for (let i = 0; i < card.winCard; i++) { const cid = randomCardId(); p.cards.push(cid); ids.push(cardName(cid)); }
-          extra = "，并得到 " + ids.join("、");
+          extraPub = "，并获得 " + card.winCard + " 张卡片";
+          extraPri = "，并得到 " + ids.join("、");
         }
       } else {
         delta = card.losePct ? -Math.round(p.money * card.losePct / 100) : -card.lose;
@@ -501,12 +538,12 @@
             const idx = Math.floor(Math.random() * p.cards.length);
             lost.push(cardName(p.cards.splice(idx, 1)[0]));
           }
-          if (lost.length) extra = "，并失去 " + lost.join("、");
+          if (lost.length) { extraPub = "，并失去 " + lost.length + " 张卡片"; extraPri = "，并失去 " + lost.join("、"); }
         }
       }
-      log(room, p.name + " 把握机会「" + card.name + "」，掷出 " + d + (success ? "（成功）" : "（失败）") + (delta >= 0 ? "，获得 ¥" + delta : "，损失 ¥" + (-delta)) + extra);
+      log(room, p.name + " 把握机会「" + card.name + "」，掷出 " + d + (success ? "（成功）" : "（失败）") + (delta >= 0 ? "，获得 ¥" + delta : "，损失 ¥" + (-delta)) + extraPub);
       pend.type = "opportunity_result";
-      pend.die = d; pend.success = success; pend.delta = delta; pend.extra = extra;
+      pend.die = d; pend.success = success; pend.delta = delta; pend.extra = extraPri;
       room.seq++;
     } else {
       log(room, p.name + " 放弃了机会「" + pend.card.name + "」");
@@ -554,6 +591,7 @@
   function nextTurn(room) {
     for (let i = 0; i < room.players.length; i++) {
       room.turn = (room.turn + 1) % room.players.length;
+      if (room.turn === 0) room.round++;
       const p = currentPlayer(room);
       if (p.bankrupt) continue;
       if (p.jailSkip > 0) { p.skipReason = "jail"; p.jailSkip--; log(room, p.name + " 在乔司监狱停留一回合"); room.seq++; return; }
@@ -609,12 +647,13 @@
       case "reverse": {
         const t = playerById(room, opts.target) || randomTarget(room);
         t.reverse += 3;
-        log(room, p.name + " 使用逆向卡，" + t.name + " 将逆向移动 3 回合");
+        log(room, t.name + " 被逆向卡影响，将逆向移动 3 回合");
         break;
       }
       case "boss": {
-        p.boss += 1;
-        log(room, p.name + " 使用霸王卡（下次踩到他人地块可免除一次过路费）");
+        if (p.boss > 0) return { error: "上一张霸王卡还未用完，不能再用第二张" };
+        p.boss = 2;
+        log(room, p.name + " 使用霸王卡（可抵消 2 次过路费，付钱时选择是否兑现）");
         break;
       }
       case "stop": {
@@ -623,7 +662,6 @@
       case "cheat": {
         const v = clamp(parseInt(opts.value, 10) || 1, 1, 12);
         room.pendingCheat = v;
-        log(room, p.name + " 使用作弊卡，本回合点数设为 " + v);
         break;
       }
       case "blast": {
@@ -641,11 +679,40 @@
         const cell = BOARD[ci];
         if (!cell || cell.t !== "prop") return { error: "目标无效" };
         const pr = room.props[ci];
-        if (!pr || pr.owner === p.id || pr.owner == null || pr.buildingLevel <= 0) return { error: "目标地块没有建筑或不是他人的" };
-        pr.buildingLevel -= 1;
-        log(room, p.name + " 使用拆除卡，「" + cell.name + "」建筑降到 " + (pr.buildingLevel ? BUILD_NAMES[pr.buildingLevel] : "无建筑"));
+        if (!pr || pr.owner === p.id || pr.owner == null) return { error: "目标地块不是他人的" };
+        if (pr.buildingLevel < 2) return { error: "拆除卡只能对商铺级(2级)以上建筑使用" };
+        const ro = playerById(room, pr.owner);
+        pr.buildingLevel -= 2;
+        log(room, (ro ? ro.name : "某玩家") + " 的地块「" + cell.name + "」被拆除卡降级");
         break;
       }
+      case "build":
+        return useBuildCard(room, p, idx, opts);
+      case "pause": {
+        const t = playerById(room, opts.target);
+        if (!t) return { error: "目标无效" };
+        t.paused += 1;
+        log(room, t.name + " 被暂停卡定在原地，跳过一回合");
+        break;
+      }
+      case "steal": {
+        const t = playerById(room, opts.target);
+        if (!t) return { error: "目标无效" };
+        if (t.cards.length) {
+          const si = Math.floor(Math.random() * t.cards.length);
+          const stolen = t.cards.splice(si, 1)[0];
+          p.cards.push(stolen);
+          log(room, t.name + " 被盗窃卡偷走一张卡");
+        } else {
+          const amt = Math.round(t.money * 0.1);
+          t.money = Math.max(0, t.money - amt);
+          p.money += amt;
+          log(room, t.name + " 没有卡牌，被盗窃卡抢走 ¥" + amt);
+        }
+        break;
+      }
+      case "forcebuy":
+        return useForceBuy(room, p, idx, opts);
       default:
         return { error: "未知卡牌" };
     }
@@ -685,6 +752,45 @@
   function randomTarget(room) {
     const pool = room.players.filter(function (p) { return !p.bankrupt; });
     return rand(pool);
+  }
+
+  // 建造卡：任意选择自己的一个地块，升 1 级
+  function useBuildCard(room, p, idx, opts) {
+    const ci = parseInt(opts.cell, 10);
+    const cell = BOARD[ci];
+    if (!cell || cell.t !== "prop") return { error: "目标无效" };
+    const pr = room.props[ci];
+    if (!pr || pr.owner !== p.id) return { error: "不是你的地块" };
+    if (pr.regionsOwned < cell.regionCount) return { error: "该地块还未完全解锁" };
+    if (pr.buildingLevel >= 6) return { error: "该地块已满级" };
+    const cost = buildCost(cell, pr.buildingLevel, pr.buildingLevel + 1);
+    if (p.money < cost) return { error: "资金不足" };
+    p.money -= cost;
+    pr.buildingLevel += 1;
+    log(room, p.name + " 使用建造卡，「" + cell.name + "」升到 " + BUILD_NAMES[pr.buildingLevel]);
+    if (pr.buildingLevel >= 6) log(room, "🎉 " + p.name + " 建成【新城】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
+    p.cards.splice(idx, 1);
+    room.seq++;
+    return { ok: true };
+  }
+
+  // 强买卡：在他人地块上使用，付其投入的 1.5 倍，地块连建筑归你
+  function useForceBuy(room, p, idx, opts) {
+    const cell = BOARD[p.pos];
+    if (cell.t !== "prop") return { error: "脚下不是城市地块" };
+    const pr = room.props[p.pos];
+    if (!pr || !pr.owner || pr.owner === p.id) return { error: "脚下不是他人的地块" };
+    const owner = playerById(room, pr.owner);
+    const invest = landPaid(cell, pr) + buildPaid(cell, pr);
+    const price = Math.round(invest * 1.5);
+    if (p.money < price) return { error: "资金不足" };
+    p.money -= price;
+    if (owner) owner.money += price;
+    pr.owner = p.id;
+    log(room, p.name + " 使用强买卡，支付 ¥" + price + " 给 " + (owner ? owner.name : "银行") + "，获得「" + cell.name + "」");
+    p.cards.splice(idx, 1);
+    room.seq++;
+    return { ok: true };
   }
 
   // ===== 抵押（主动，回合开始阶段）=====
