@@ -221,10 +221,11 @@
 
   // ===== 移动 =====
   function moveBy(room, p, steps, reverse) {
-    const dir = reverse ? -1 : 1;
-    const path = [];
-    let reward = 0;
-    const sr = room.settings.startReward != null ? room.settings.startReward : START_REWARD;
+      const dir = reverse ? -1 : 1;
+      const path = [];
+      let reward = 0;
+      const baseSr = room.settings.startReward != null ? room.settings.startReward : START_REWARD;
+      const sr = Math.round(baseSr * newTownMultiplier(room));
     for (let k = 0; k < steps; k++) {
       p.pos = (p.pos + dir + N) % N;
       path.push(p.pos);
