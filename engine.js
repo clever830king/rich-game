@@ -606,7 +606,7 @@
     opts = opts || {};
     switch (cardId) {
       case "reverse": {
-        const t = randomTarget(room);
+        const t = playerById(room, opts.target) || randomTarget(room);
         t.reverse += 3;
         log(room, p.name + " 使用逆向卡，" + t.name + " 将逆向移动 3 回合");
         break;
