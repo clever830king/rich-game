@@ -479,7 +479,7 @@
       turnEl.textContent = "🏆 " + (playerById(room, room.winner) || {}).name + " 获胜";
     } else {
       const p = cur();
-      turnEl.textContent = "轮到 " + p.name + (room.phase === "landing" ? "（结算中）" : "") + (room.dice ? "  🎲" + room.dice : "");
+      turnEl.textContent = "第 " + (room.round || 1) + " 回合 · 轮到 " + p.name + (room.phase === "landing" ? "（结算中）" : "") + (room.dice ? "  🎲" + room.dice : "");
     }
     const nt = EN.newTownMultiplier(room);
     $("#hudNewtown").textContent = "新城倍率 ×" + nt.toFixed(1);
@@ -746,19 +746,21 @@
     const el = $("#turnTimer");
     if (!el) return;
     const room = S.room;
-    if (!room || room.status !== "playing") { el.classList.add("hidden"); return; }
+    if (!room || room.status !== "playing") { el.classList.add("hidden"); document.body.classList.remove("timer-urgent"); return; }
     const p = cur();
-    if (!p || p.bankrupt) { el.classList.add("hidden"); return; }
+    if (!p || p.bankrupt) { el.classList.add("hidden"); document.body.classList.remove("timer-urgent"); return; }
     if (p.isAI || p.aiManaged) {
       el.textContent = "🤖 " + p.name + " AI托管中";
       el.className = "turn-timer managed";
       el.classList.remove("hidden");
+      document.body.classList.remove("timer-urgent");
       return;
     }
-    const remain = Math.max(0, Math.ceil(25 - (Date.now() - (room.lastActionAt || 0)) / 1000));
+    const remain = Math.max(0, Math.ceil(45 - (Date.now() - (room.lastActionAt || 0)) / 1000));
     el.textContent = p.name + " 剩余操作时间 " + remain + " 秒";
-    el.className = "turn-timer" + (remain <= 5 ? " urgent" : "");
+    el.className = "turn-timer" + (remain <= 10 ? " urgent" : "");
     el.classList.remove("hidden");
+    document.body.classList.toggle("timer-urgent", remain <= 10 && remain > 0 && !p.isAI && !p.aiManaged);
   }
 
   function renderPlayers() {
@@ -773,7 +775,7 @@
         h("span", { class: "pc-name" }, p.name)
       ));
       card.appendChild(h("div", { class: "pc-money" }, p.bankrupt ? "破产" : "¥" + p.money));
-      if (p.cards.length) card.appendChild(h("div", { class: "pc-cards" }, "卡牌 ×" + p.cards.length));
+      if (p.cards.length) card.appendChild(h("div", { class: "pc-cards" }, p.id === S.playerId ? "卡牌 ×" + p.cards.length : "有卡牌"));
       if (p.aiManaged || p.reverse > 0 || p.jailSkip > 0 || p.boss > 0) card.appendChild(h("div", { class: "pc-status" }, statusText(p)));
       card.addEventListener("click", () => playerInfoModal(p));
       box.appendChild(card);
@@ -914,7 +916,7 @@
     const elapsed = Date.now() - (S.room.turnStartedAt || 0);
     const idleElapsed = Date.now() - (S.room.lastActionAt || 0);
     // 真人 25 秒无操作 → 自动进入 AI 托管
-    if (!cp.isAI && !cp.aiManaged && idleElapsed > 25000) {
+    if (!cp.isAI && !cp.aiManaged && idleElapsed > 45000) {
       cp.aiManaged = true;
       S.room.seq++;
       saveAndBroadcast();
@@ -946,6 +948,14 @@
         break;
       case "pay": action = (pend.canBoss && p.boss > 0) ? { boss: true } : {}; break;
       case "opportunity": action = { grasp: p.money >= pend.card.lose && Math.random() < 0.5 }; break;
+      case "emergency": {
+        const plots = BOARD.filter(c => c.t === "prop" && S.room.props[c.index].owner === p.id && (S.room.props[c.index].regionsOwned > 0 || S.room.props[c.index].buildingLevel > 0))
+          .sort((a, b) => EN.mortgageValue(a, S.room.props[a.index]) - EN.mortgageValue(b, S.room.props[b.index]));
+        if (plots.length) action = { mortgage: plots[0].index };
+        else if (p.cards.length) action = { mortgageCard: p.cards[0] };
+        else action = { bankrupt: true };
+        break;
+      }
       default: action = {}; break;
     }
     EN.resolve(S.room, action);
@@ -1067,7 +1077,21 @@
         foot);
       return;
     }
+    if (pend.type === "emergency") { emergencyModal(pend); return; }
     landingMsg = "本回合结算完成";
+  }
+
+  function emergencyModal(pend) {
+    const room = S.room, p = cur();
+    const plots = BOARD.filter(c => c.t === "prop" && room.props[c.index].owner === p.id && (room.props[c.index].regionsOwned > 0 || room.props[c.index].buildingLevel > 0));
+    const body = h("div", {},
+      h("div", { class: "big" }, "还差 ¥" + Math.max(0, pend.shortfall)),
+      plots.length ? h("div", { class: "dim", style: { margin: "6px 0" } }, "请抵押地产或卡牌凑钱：") : null,
+      plots.length ? h("div", { class: "opt-list" }, plots.map(c => h("button", { class: "opt-btn", onclick: () => { sfxPay(); doneLanding({ mortgage: c.index }); } }, c.name + " → 抵押得 ¥" + EN.mortgageValue(c, room.props[c.index])))) : null,
+      p.cards.length ? h("div", { class: "opt-list", style: { marginTop: "6px" } }, p.cards.map((cid, i) => h("button", { class: "opt-btn", onclick: () => { sfxPay(); doneLanding({ mortgageCard: cid }); } }, "抵押卡牌【" + cardName(cid) + "】 → 得 ¥5000"))) : null
+    );
+    const foot = [h("button", { class: "btn btn-danger", onclick: () => doneLanding({ bankrupt: true }) }, "破产退出")];
+    openModal("资金不足", body, foot);
   }
 
   /* ---------- cards ---------- */
@@ -1105,8 +1129,8 @@
     }
     if (cardId === "remove") {
       const room = S.room;
-      const targets = BOARD.filter(c => c.t === "prop" && room.props[c.index].owner && room.props[c.index].owner !== S.playerId && room.props[c.index].buildingLevel > 0);
-      if (!targets.length) { toast("没有可拆除的目标（需要他人有建筑的地块）"); return; }
+      const targets = BOARD.filter(c => c.t === "prop" && room.props[c.index].owner && room.props[c.index].owner !== S.playerId && room.props[c.index].buildingLevel >= 2);
+      if (!targets.length) { toast("没有可拆除的目标（需要他人商铺级(2级)以上建筑的地块）"); return; }
       openModal("拆除卡 · 选择目标",
         h("div", { class: "opt-list" }, targets.map(c => h("button", { class: "opt-btn", onclick: () => doCard(cardId, { cell: c.index }) }, c.name + "（" + ZT.BUILD_NAMES[room.props[c.index].buildingLevel] + "）"))),
         [h("button", { class: "btn btn-ghost", onclick: cardsModal }, "返回")]
@@ -1115,14 +1139,14 @@
     }
     if (cardId === "stop") {
       const info = EN.stopActionInfo(S.room, S.playerId);
-      if (!info) { toast("停留卡需要在自己脚下地块使用（再买区域或再升建筑）"); return; }
+      if (!info) { toast("升级卡需要在自己脚下地块使用（再买区域或再升建筑）"); return; }
       if (info.kind === "buy") {
-        openModal("停留卡 · 额外买地", h("div", {},
+        openModal("升级卡 · 额外买地", h("div", {},
           h("div", { class: "big" }, BOARD[info.cell].name),
           h("div", { class: "dim" }, "再买 1 个区域 ¥" + info.price)
         ), [btn("购买", () => doCard("stop", { buy: true })), h("button", { class: "btn btn-ghost", onclick: cardsModal }, "返回")]);
       } else {
-        openModal("停留卡 · 额外建设", h("div", {},
+        openModal("升级卡 · 额外建设", h("div", {},
           h("div", { class: "big" }, BOARD[info.cell].name),
           h("div", { class: "dim" }, "再升建筑")
         ), [
@@ -1131,6 +1155,54 @@
           h("button", { class: "btn btn-ghost", onclick: cardsModal }, "返回")
         ]);
       }
+      return;
+    }
+    if (cardId === "build") {
+      const room = S.room;
+      const targets = BOARD.filter(c => c.t === "prop" && room.props[c.index].owner === S.playerId && room.props[c.index].regionsOwned >= c.regionCount && room.props[c.index].buildingLevel < 6);
+      if (!targets.length) { toast("没有可建造的地块（需要自己完全解锁且未满级的地块）"); return; }
+      openModal("建造卡 · 选择自己的地块（升 1 级）",
+        h("div", { class: "opt-list" }, targets.map(c => h("button", { class: "opt-btn", onclick: () => doCard(cardId, { cell: c.index }) }, c.name + "（" + (ZT.BUILD_NAMES[room.props[c.index].buildingLevel] || "无建筑") + "）"))),
+        [h("button", { class: "btn btn-ghost", onclick: cardsModal }, "返回")]
+      );
+      return;
+    }
+    if (cardId === "pause") {
+      const room = S.room;
+      const targets = room.players.filter(p => !p.bankrupt);
+      openModal("暂停卡 · 选择目标（原地跳过一回合）",
+        h("div", { class: "opt-list" }, targets.map(p => h("button", { class: "opt-btn", onclick: () => doCard(cardId, { target: p.id }) }, p.token + " " + p.name + (p.id === S.playerId ? "（自己）" : "")))),
+        [h("button", { class: "btn btn-ghost", onclick: cardsModal }, "返回")]
+      );
+      return;
+    }
+    if (cardId === "steal") {
+      const room = S.room;
+      const targets = room.players.filter(p => !p.bankrupt && p.id !== S.playerId);
+      if (!targets.length) { toast("没有可盗窃的目标"); return; }
+      openModal("盗窃卡 · 选择目标（偷卡，无卡则抢10%金钱）",
+        h("div", { class: "opt-list" }, targets.map(p => h("button", { class: "opt-btn", onclick: () => doCard(cardId, { target: p.id }) }, p.token + " " + p.name + "（卡牌 ×" + p.cards.length + "）"))),
+        [h("button", { class: "btn btn-ghost", onclick: cardsModal }, "返回")]
+      );
+      return;
+    }
+    if (cardId === "forcebuy") {
+      const room = S.room;
+      const cell = BOARD[cur().pos];
+      if (cell.t !== "prop" || !room.props[cur().pos].owner || room.props[cur().pos].owner === S.playerId) { toast("强买卡需要在他人有主的地块上使用"); return; }
+      const pr = room.props[cur().pos];
+      const owner = playerById(room, pr.owner);
+      let invest = 0;
+      for (let k = 0; k < pr.regionsOwned; k++) invest += cell.regionPrices[k];
+      if (pr.buildingLevel > 0) invest += cell.build[pr.buildingLevel - 1];
+      const price = Math.round(invest * 1.5);
+      openModal("强买卡",
+        h("div", {},
+          h("div", { class: "big" }, cell.name),
+          h("div", { class: "dim" }, "付给 " + (owner ? owner.name : "银行") + " ¥" + price + "（其投入的 1.5 倍），地块连建筑归你")
+        ),
+        [btn("强买 ¥" + price, () => doCard(cardId, {})), h("button", { class: "btn btn-ghost", onclick: cardsModal }, "返回")]
+      );
       return;
     }
     doCard(cardId, {});
