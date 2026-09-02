@@ -274,7 +274,7 @@
     if (cell.t === "card") {
       const cid = randomCardId();
       p.cards.push(cid);
-      log(room, p.name + " 在卡牌补给站获得一张【" + cardName(cid) + "】");
+      log(room, p.name + " 在卡牌补给站获得一张卡片");
       return { type: "card", card: cid, cell: cell.name };
     }
     if (cell.t === "fate") {
@@ -736,14 +736,14 @@
       if (p.money < cost) return { error: "资金不足，无法购买区域" };
       p.money -= cost;
       pr.regionsOwned += 1;
-      log(room, p.name + " 使用停留卡，额外购买「" + cell.name + "」区域" + pr.regionsOwned + "/" + cell.regionCount);
+      log(room, p.name + " 使用升级卡，额外购买「" + cell.name + "」区域" + pr.regionsOwned + "/" + cell.regionCount);
     } else if (pr.buildingLevel < 6) {
       const lvls = clamp(parseInt(opts.levels, 10) || 1, 1, Math.min(2, 6 - pr.buildingLevel));
       const cost = buildCost(cell, pr.buildingLevel, pr.buildingLevel + lvls);
       if (p.money < cost) return { error: "资金不足，无法升级" };
       p.money -= cost;
       pr.buildingLevel += lvls;
-      log(room, p.name + " 使用停留卡，额外将「" + cell.name + "」升级到 " + BUILD_NAMES[pr.buildingLevel]);
+      log(room, p.name + " 使用升级卡，额外将「" + cell.name + "」升级到 " + BUILD_NAMES[pr.buildingLevel]);
       if (pr.buildingLevel >= 6) log(room, "🎉 " + p.name + " 建成【新城】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
     } else {
       return { error: "该地块已满级" };
