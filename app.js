@@ -871,6 +871,20 @@
     saveAndBroadcast();
     render();
   }
+  function skipTurnNow() {
+    if (!isMe()) { toast("还没轮到你"); return; }
+    const pend = S.room.pending;
+    if (pend && (pend.type === "pay" || pend.type === "emergency")) {
+      toast("你还需要先支付过路费，不能跳过回合");
+      return;
+    }
+    markActivity();
+    EN.forceEndTurn(S.room);
+    landingMsg = null;
+    closeModal();
+    saveAndBroadcast();
+    render();
+  }
   function toggleAiManage() {
     if (!S.room || !S.playerId) return;
     const p = me();
@@ -916,7 +930,7 @@
     const elapsed = Date.now() - (S.room.turnStartedAt || 0);
     const idleElapsed = Date.now() - (S.room.lastActionAt || 0);
     // 真人 25 秒无操作 → 自动进入 AI 托管
-    if (!cp.isAI && !cp.aiManaged && idleElapsed > 45000) {
+    if (!cp.isAI && !cp.aiManaged && (!isOnline(cp) || idleElapsed > 45000)) {
       cp.aiManaged = true;
       S.room.seq++;
       saveAndBroadcast();
@@ -1181,7 +1195,7 @@
       const targets = room.players.filter(p => !p.bankrupt && p.id !== S.playerId);
       if (!targets.length) { toast("没有可盗窃的目标"); return; }
       openModal("盗窃卡 · 选择目标（偷卡，无卡则抢10%金钱）",
-        h("div", { class: "opt-list" }, targets.map(p => h("button", { class: "opt-btn", onclick: () => doCard(cardId, { target: p.id }) }, p.token + " " + p.name + "（卡牌 ×" + p.cards.length + "）"))),
+        h("div", { class: "opt-list" }, targets.map(p => h("button", { class: "opt-btn", onclick: () => doCard(cardId, { target: p.id }) }, p.token + " " + p.name))),
         [h("button", { class: "btn btn-ghost", onclick: cardsModal }, "返回")]
       );
       return;
@@ -1304,7 +1318,7 @@
     });
     const body = h("div", {},
       h("div", { class: "big" }, p.token + " " + p.name),
-      h("div", { class: "dim" }, "资金 ¥" + p.money + " · 卡牌 ×" + p.cards.length),
+      h("div", { class: "dim" }, "资金 ¥" + p.money + (p.id === S.playerId ? " · 卡牌 ×" + p.cards.length : "")),
       netList.length ? h("div", { class: "opt-list", style: { marginTop: "10px" } }, netList.map(function (t) { return h("div", { class: "dim" }, t); })) : null,
       h("div", { class: "opt-list", style: { marginTop: "10px" } }, props.length ? props.map(c => h("div", { class: "dim" }, c.name + " " + (room.props[c.index].regionsOwned) + "/" + c.regionCount + (room.props[c.index].buildingLevel ? " " + ZT.BUILD_NAMES[room.props[c.index].buildingLevel] : ""))) : h("div", { class: "dim" }, "暂无地产"))
     );
@@ -1379,6 +1393,7 @@
     $("#btnReconnect").onclick = reconnect;
     $("#btnLeave").onclick = leaveRoom;
     $("#btnExitGame").onclick = leaveRoom;
+    $("#btnSkipTurn").onclick = skipTurnNow;
     $("#endTurnBtn").onclick = endTurnNow;
     $("#btnCopyCode").onclick = () => {
       const code = S.room && S.room.code;
