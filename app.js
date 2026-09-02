@@ -913,7 +913,16 @@
 
   /* ---------- AI 接管（掉线 / AI 玩家自动代打） ---------- */
   let aiTimer = null;
-  function isAiDriver() { return S.room && S.room.host === S.playerId; }
+  function isAiDriver() {
+    if (!S.room) return false;
+    const host = playerById(S.room, S.room.host);
+    if (host && isOnline(host)) return S.room.host === S.playerId;
+    // 房主掉线：由序号最小的在线玩家接管 AI 驱动
+    const online = S.room.players.filter(function (p) { return !p.bankrupt && isOnline(p); });
+    if (!online.length) return false;
+    online.sort(function (a, b) { return S.room.players.indexOf(a) - S.room.players.indexOf(b); });
+    return online[0].id === S.playerId;
+  }
   function currentNeedsAI() {
     if (!S.room || S.room.status !== "playing") return false;
     const cp = cur();
@@ -1365,7 +1374,7 @@
     stopHeartbeat();
     unwatchRoom();
     if (CLOUD_DB && S.code && S.playerId) presenceRef(S.code, S.playerId).remove().catch(function () {});
-    clearSession();
+    // 保留 session，方便之后通过“重新连接”回到游戏
     S.room = null; S.code = null; S.playerId = null;
     renderHome();
   }
