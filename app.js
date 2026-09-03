@@ -35,7 +35,7 @@
     "九、命运（不可控，抽到立即执行，共 52 张）：按约 40% 获得卡牌、10% 失去卡牌、25% 获得金钱、25% 损失金钱的配比随机触发；抽卡时有命运骰子动画。",
     "十、机会（主动把握，共 53 张）：可选「把握机会」或「放弃机会」；把握后掷机会骰子（奇数失败、偶数成功），机会骰子不影响移动，且有滚动动画。",
     "十一、乔司监狱：进入掷骰，单数直接离开、双数下回合停留一回合。",
-    "十二、抵押：只能在掷骰子前主动抵押（整块地块返还 50%，卡牌每张 ¥5000）；落地付不起过路费时可进入紧急抵押，抵押掉不重要的地块/卡牌再付钱，仍不够则破产退出。",
+    "十二、抵押：只能在掷骰子前主动抵押（整块地块返还 50%，卡牌每张 ¥5000，两者都会随新城倍率同步翻倍）；落地付不起过路费时可进入紧急抵押，抵押掉不重要的地块/卡牌再付钱，仍不够则破产退出。",
     "十三、时间限制：掷骰子后不能主动用卡牌、抵押、建设；只有付不起过路费时才能紧急抵押。",
     "十四、AI 托管：左上角可手动开启/关闭；玩家 45 秒无操作会自动进入 AI 托管（最后 10 秒页面边框闪烁变红），任意操作即可退出托管。",
     "十五、结算：空地、起点、命运、机会、监狱等结算会自动完成并进入下一位玩家，不需要手动跳过。"
@@ -977,7 +977,7 @@
       case "opportunity": action = { grasp: p.money >= pend.card.lose && Math.random() < 0.5 }; break;
       case "emergency": {
         const plots = BOARD.filter(c => c.t === "prop" && S.room.props[c.index].owner === p.id && (S.room.props[c.index].regionsOwned > 0 || S.room.props[c.index].buildingLevel > 0))
-          .sort((a, b) => EN.mortgageValue(a, S.room.props[a.index]) - EN.mortgageValue(b, S.room.props[b.index]));
+          .sort((a, b) => EN.mortgageValue(S.room, a, S.room.props[a.index]) - EN.mortgageValue(S.room, b, S.room.props[b.index]));
         if (plots.length) action = { mortgage: plots[0].index };
         else if (p.cards.length) action = { mortgageCard: p.cards[0] };
         else action = { bankrupt: true };
@@ -1114,8 +1114,8 @@
     const body = h("div", {},
       h("div", { class: "big" }, "还差 ¥" + Math.max(0, pend.shortfall)),
       plots.length ? h("div", { class: "dim", style: { margin: "6px 0" } }, "请抵押地产或卡牌凑钱：") : null,
-      plots.length ? h("div", { class: "opt-list" }, plots.map(c => h("button", { class: "opt-btn", onclick: () => { sfxPay(); doneLanding({ mortgage: c.index }); } }, c.name + " → 抵押得 ¥" + EN.mortgageValue(c, room.props[c.index])))) : null,
-      p.cards.length ? h("div", { class: "opt-list", style: { marginTop: "6px" } }, p.cards.map((cid, i) => h("button", { class: "opt-btn", onclick: () => { sfxPay(); doneLanding({ mortgageCard: cid }); } }, "抵押卡牌【" + cardName(cid) + "】 → 得 ¥5000"))) : null
+      plots.length ? h("div", { class: "opt-list" }, plots.map(c => h("button", { class: "opt-btn", onclick: () => { sfxPay(); doneLanding({ mortgage: c.index }); } }, c.name + " → 抵押得 ¥" + EN.mortgageValue(room, c, room.props[c.index])))) : null,
+      p.cards.length ? h("div", { class: "opt-list", style: { marginTop: "6px" } }, p.cards.map((cid, i) => h("button", { class: "opt-btn", onclick: () => { sfxPay(); doneLanding({ mortgageCard: cid }); } }, "抵押卡牌【" + cardName(cid) + "】 → 得 ¥" + EN.cardMortgageValue(room)))) : null
     );
     const foot = [h("button", { class: "btn btn-danger", onclick: () => doneLanding({ bankrupt: true }) }, "破产退出")];
     openModal("资金不足", body, foot);
@@ -1254,9 +1254,9 @@
     if (!list.length && !cardList.length) { toast("没有可抵押的地产或卡牌"); return; }
     const body = h("div", {},
       list.length ? h("div", { class: "dim", style: { marginBottom: "6px" } }, "抵押地产：") : null,
-      h("div", { class: "opt-list" }, list.map(c => h("button", { class: "opt-btn", onclick: () => doMortgage(c.index) }, c.name + " → 抵押得 ¥" + EN.mortgageValue(c, room.props[c.index])))),
-      cardList.length ? h("div", { class: "dim", style: { margin: "10px 0 6px" } }, "抵押卡牌（每张 ¥5000）：") : null,
-      h("div", { class: "opt-list" }, cardList.map(c => h("button", { class: "opt-btn", onclick: () => doMortgageCard(c.id) }, cardName(c.id) + " ×" + c.n + " → 抵押得 ¥5000")))
+      h("div", { class: "opt-list" }, list.map(c => h("button", { class: "opt-btn", onclick: () => doMortgage(c.index) }, c.name + " → 抵押得 ¥" + EN.mortgageValue(room, c, room.props[c.index])))),
+      cardList.length ? h("div", { class: "dim", style: { margin: "10px 0 6px" } }, "抵押卡牌（每张 ¥" + EN.cardMortgageValue(room) + "）：") : null,
+      h("div", { class: "opt-list" }, cardList.map(c => h("button", { class: "opt-btn", onclick: () => doMortgageCard(c.id) }, cardName(c.id) + " ×" + c.n + " → 抵押得 ¥" + EN.cardMortgageValue(room))))
     );
     openModal("抵押",
       body,
@@ -1305,7 +1305,7 @@
         const owner = playerById(room, pr.owner);
         html += "<div class='dim'>所有者：" + (owner ? owner.name : "?") + "，建筑：" + (ZT.BUILD_NAMES[pr.buildingLevel] || "无") + "</div>";
         html += "<div class='big'>当前过路费 ¥" + EN.propToll(room, c) + "</div>";
-        if (owner && owner.id === S.playerId) html += "<div class='dim'>可抵押价值 ¥" + EN.mortgageValue(c, pr) + "</div>";
+        if (owner && owner.id === S.playerId) html += "<div class='dim'>可抵押价值 ¥" + EN.mortgageValue(room, c, pr) + "</div>";
       } else {
         html += "<div class='dim'>无主 · 区域1 ¥" + c.regionPrices[0] + (c.regionCount > 1 ? "，区域2 ¥" + c.regionPrices[1] : "") + "</div>";
       }
