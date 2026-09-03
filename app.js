@@ -334,7 +334,7 @@
   function isMe() { return S.room && S.room.status === "playing" && cur() && cur().id === S.playerId; }
   function isMyTurn() { return isMe() && S.room.phase === "action"; }
   function colorOf(p) { const i = S.room.players.indexOf(p); return TOKEN_COLORS[i % TOKEN_COLORS.length]; }
-  function isOnline(p) { if (isLocal()) return true; if (p.id === S.playerId) return true; return (S.seen[p.id] || 0) > Date.now() - 45000; }
+  function isOnline(p) { if (isLocal()) return true; if (p.id === S.playerId) return true; const seen = S.seen[p.id]; if (!seen) return true; return seen > Date.now() - 45000; }
   function openModal(title, body, foot) {
     $("#modalTitle").textContent = title;
     const b = $("#modalBody"); b.innerHTML = ""; b.appendChild(body);
@@ -936,10 +936,13 @@
     if (!isAiDriver() || !S.room || S.room.status !== "playing") return;
     const cp = cur();
     if (!cp || cp.bankrupt) return;
-    const elapsed = Date.now() - (S.room.turnStartedAt || 0);
-    const idleElapsed = Date.now() - (S.room.lastActionAt || 0);
-    // 真人 25 秒无操作 → 自动进入 AI 托管
-    if (!cp.isAI && !cp.aiManaged && (!isOnline(cp) || idleElapsed > 45000)) {
+    // 防御：若时间戳缺失（旧数据/未初始化），先补上，避免开局即被误判为超时托管
+    if (!S.room.turnStartedAt) S.room.turnStartedAt = Date.now();
+    if (!S.room.lastActionAt) S.room.lastActionAt = Date.now();
+    const elapsed = Date.now() - S.room.turnStartedAt;
+    const idleElapsed = Date.now() - S.room.lastActionAt;
+    // 真人 45 秒无操作 → 自动进入 AI 托管（不再用 presence 心跳判定离线，避免误判）
+    if (!cp.isAI && !cp.aiManaged && idleElapsed > 45000) {
       cp.aiManaged = true;
       S.room.seq++;
       saveAndBroadcast();
