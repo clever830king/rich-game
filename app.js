@@ -750,7 +750,7 @@
     const p = cur();
     if (!p || p.bankrupt) { el.classList.add("hidden"); document.body.classList.remove("timer-urgent"); return; }
     if (p.isAI || p.aiManaged) {
-      el.textContent = "🤖 " + p.name + " AI托管中";
+      el.textContent = p.isAI ? ("🤖 " + p.name + "（电脑玩家）") : ("🤖 " + p.name + " AI托管中");
       el.className = "turn-timer managed";
       el.classList.remove("hidden");
       document.body.classList.remove("timer-urgent");
@@ -776,14 +776,15 @@
       ));
       card.appendChild(h("div", { class: "pc-money" }, p.bankrupt ? "破产" : "¥" + p.money));
       if (p.cards.length) card.appendChild(h("div", { class: "pc-cards" }, p.id === S.playerId ? "卡牌 ×" + p.cards.length : "有卡牌"));
-      if (p.aiManaged || p.reverse > 0 || p.jailSkip > 0 || p.boss > 0) card.appendChild(h("div", { class: "pc-status" }, statusText(p)));
+      if (p.isAI || p.aiManaged || p.reverse > 0 || p.jailSkip > 0 || p.boss > 0) card.appendChild(h("div", { class: "pc-status" }, statusText(p)));
       card.addEventListener("click", () => playerInfoModal(p));
       box.appendChild(card);
     });
   }
   function statusText(p) {
     const a = [];
-    if (p.aiManaged) a.push("AI托管");
+    if (p.isAI) a.push("电脑");
+    else if (p.aiManaged) a.push("AI托管");
     if (p.reverse > 0) a.push("逆向" + p.reverse + "回合");
     if (p.jailSkip > 0) a.push("监狱");
     if (p.boss > 0) a.push("霸王");
@@ -1393,6 +1394,9 @@
     room.settings.sound = $("#setSound").value === "1";
     room.settings.anim = $("#setAnim").value;
     EN.start(room);
+    // 双保险：确保开局时间戳不为 0，避免 aiTick 误判为“长时间无操作”而立即托管
+    room.lastActionAt = Date.now();
+    room.turnStartedAt = Date.now();
     saveAndBroadcast();
     render();
   }
