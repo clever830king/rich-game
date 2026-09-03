@@ -182,8 +182,11 @@
   function buildCost(cell, from, to) {
     return (to > 0 ? cell.build[to - 1] : 0) - (from > 0 ? cell.build[from - 1] : 0);
   }
-  function mortgageValue(cell, pr) {
-    return Math.round((landPaid(cell, pr) + buildPaid(cell, pr)) * 0.5);
+  function mortgageValue(room, cell, pr) {
+    return Math.round((landPaid(cell, pr) + buildPaid(cell, pr)) * 0.5 * newTownMultiplier(room));
+  }
+  function cardMortgageValue(room) {
+    return Math.round(5000 * newTownMultiplier(room));
   }
 
   function cityOwnedCount(room, ownerId, city) {
@@ -467,7 +470,7 @@
       const cell = BOARD[action.mortgage];
       const pr = room.props[action.mortgage];
       if (cell && cell.t === "prop" && pr && pr.owner === p.id) {
-        const val = mortgageValue(cell, pr);
+        const val = mortgageValue(room, cell, pr);
         p.money += val;
         pr.owner = null; pr.regionsOwned = 0; pr.buildingLevel = 0;
         pend.shortfall -= val;
@@ -490,9 +493,10 @@
       const ci = p.cards.indexOf(action.mortgageCard);
       if (ci >= 0) {
         p.cards.splice(ci, 1);
-        p.money += 5000;
-        pend.shortfall -= 5000;
-        log(room, p.name + " 紧急抵押一张卡，获得 ¥5000");
+        const cv = cardMortgageValue(room);
+        p.money += cv;
+        pend.shortfall -= cv;
+        log(room, p.name + " 紧急抵押一张卡，获得 ¥" + cv);
       }
       if (pend.shortfall <= 0) {
         p.money -= pend.toll;
@@ -806,7 +810,7 @@
     const pr = room.props[cellIndex];
     if (!pr || pr.owner !== p.id) return { error: "不是你的地块" };
     if (pr.regionsOwned <= 0 && pr.buildingLevel <= 0) return { error: "该地块没有可抵押价值" };
-    const val = mortgageValue(cell, pr);
+    const val = mortgageValue(room, cell, pr);
     p.money += val;
     pr.owner = null; pr.regionsOwned = 0; pr.buildingLevel = 0;
     log(room, p.name + " 抵押「" + cell.name + "」获得 ¥" + val);
@@ -821,10 +825,11 @@
     const idx = p.cards.indexOf(cardId);
     if (idx < 0) return { error: "没有这张卡" };
     p.cards.splice(idx, 1);
-    p.money += 5000;
-    log(room, p.name + " 抵押一张【" + cardName(cardId) + "】，获得 ¥5000");
+    const cv = cardMortgageValue(room);
+    p.money += cv;
+    log(room, p.name + " 抵押一张【" + cardName(cardId) + "】，获得 ¥" + cv);
     room.seq++;
-    return { ok: true, value: 5000 };
+    return { ok: true, value: cv };
   }
 
   // ===== 聊天室 =====
@@ -907,6 +912,7 @@
     cityOwnedCount: cityOwnedCount,
     newTownMultiplier: newTownMultiplier,
     mortgageValue: mortgageValue,
+    cardMortgageValue: cardMortgageValue,
     nextRegionCost: nextRegionCost,
     plotEarnings: plotEarnings,
     playerNet: playerNet,
