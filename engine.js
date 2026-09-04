@@ -210,20 +210,30 @@
     });
     return n;
   }
+  function districtCount(room) {
+    let n = 0;
+    BOARD.forEach(function (c) {
+      if (c.t === "prop") {
+        const pr = room.props[c.index];
+        if (pr && pr.buildingLevel === 7) n++;
+      }
+    });
+    return n;
+  }
   function metroCount(room) {
     let n = 0;
     BOARD.forEach(function (c) {
       if (c.t === "prop") {
         const pr = room.props[c.index];
-        if (pr && pr.buildingLevel >= 7) n++;
+        if (pr && pr.buildingLevel >= 8) n++;
       }
     });
     return n;
   }
-  // 地租倍率：新城 +0.5/座，都市 +1.0/座（新城的两倍）
-  function newTownMultiplier(room) { return 1 + newTownCount(room) * 0.5 + metroCount(room) * 1.0; }
-  // 起点倍率：只有新城加成的一半（+0.25/座），都市对起点无加成
-  function startRewardMultiplier(room) { return 1 + newTownCount(room) * 0.25; }
+  // 地租倍率：新城 +0.5/座，新区 +1.0/座（新城两倍），都市 +2.0/座（新区两倍）
+  function newTownMultiplier(room) { return 1 + newTownCount(room) * 0.5 + districtCount(room) * 1.0 + metroCount(room) * 2.0; }
+  // 起点倍率：新城 +0.25/座（新城加成一半），新区无加成，都市 +0.5/座（新城起点加成的两倍）
+  function startRewardMultiplier(room) { return 1 + newTownCount(room) * 0.25 + metroCount(room) * 0.5; }
 
   function propToll(room, cell) {
     const pr = room.props[cell.index];
@@ -318,8 +328,8 @@
     } else if (pr.owner === p.id) {
       if (pr.regionsOwned < cell.regionCount) {
         return { type: "buy", cell: idx, price: nextRegionCost(cell, pr) };
-      } else if (pr.buildingLevel < 7) {
-        const lvls = Math.min(2, 7 - pr.buildingLevel);
+      } else if (pr.buildingLevel < 8) {
+        const lvls = Math.min(2, 8 - pr.buildingLevel);
         const cost1 = buildCost(cell, pr.buildingLevel, pr.buildingLevel + 1);
         const cost2 = lvls >= 2 ? buildCost(cell, pr.buildingLevel, pr.buildingLevel + 2) : null;
         return { type: "build", cell: idx, lvls: lvls, cost1: cost1, cost2: cost2 };
@@ -449,7 +459,8 @@
       pr.buildingLevel += n;
       log(room, p.name + " 将「" + cell.name + "」升级到 " + BUILD_NAMES[pr.buildingLevel] + "，花费 ¥" + cost);
       if (pr.buildingLevel === 6) log(room, "🎉 " + p.name + " 建成【新城】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
-      else if (pr.buildingLevel >= 7) log(room, "🏙️ " + p.name + " 建成【都市】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
+      else if (pr.buildingLevel === 7) log(room, "🏗️ " + p.name + " 建成【新区】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
+      else if (pr.buildingLevel >= 8) log(room, "🏙️ " + p.name + " 建成【都市】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
     }
     finishTurn(room);
   }
@@ -755,15 +766,16 @@
       p.money -= cost;
       pr.regionsOwned += 1;
       log(room, p.name + " 使用升级卡，额外购买「" + cell.name + "」区域" + pr.regionsOwned + "/" + cell.regionCount);
-    } else if (pr.buildingLevel < 7) {
-      const lvls = clamp(parseInt(opts.levels, 10) || 1, 1, Math.min(2, 7 - pr.buildingLevel));
+    } else if (pr.buildingLevel < 8) {
+      const lvls = clamp(parseInt(opts.levels, 10) || 1, 1, Math.min(2, 8 - pr.buildingLevel));
       const cost = buildCost(cell, pr.buildingLevel, pr.buildingLevel + lvls);
       if (p.money < cost) return { error: "资金不足，无法升级" };
       p.money -= cost;
       pr.buildingLevel += lvls;
       log(room, p.name + " 使用升级卡，额外将「" + cell.name + "」升级到 " + BUILD_NAMES[pr.buildingLevel]);
       if (pr.buildingLevel === 6) log(room, "🎉 " + p.name + " 建成【新城】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
-      else if (pr.buildingLevel >= 7) log(room, "🏙️ " + p.name + " 建成【都市】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
+      else if (pr.buildingLevel === 7) log(room, "🏗️ " + p.name + " 建成【新区】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
+      else if (pr.buildingLevel >= 8) log(room, "🏙️ " + p.name + " 建成【都市】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
     } else {
       return { error: "该地块已满级" };
     }
@@ -785,14 +797,15 @@
     const pr = room.props[ci];
     if (!pr || pr.owner !== p.id) return { error: "不是你的地块" };
     if (pr.regionsOwned < cell.regionCount) return { error: "该地块还未完全解锁" };
-    if (pr.buildingLevel >= 7) return { error: "该地块已满级" };
+    if (pr.buildingLevel >= 8) return { error: "该地块已满级" };
     const cost = buildCost(cell, pr.buildingLevel, pr.buildingLevel + 1);
     if (p.money < cost) return { error: "资金不足" };
     p.money -= cost;
     pr.buildingLevel += 1;
     log(room, p.name + " 使用建造卡，「" + cell.name + "」升到 " + BUILD_NAMES[pr.buildingLevel]);
     if (pr.buildingLevel === 6) log(room, "🎉 " + p.name + " 建成【新城】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
-    else if (pr.buildingLevel >= 7) log(room, "🏙️ " + p.name + " 建成【都市】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
+    else if (pr.buildingLevel === 7) log(room, "🏗️ " + p.name + " 建成【新区】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
+    else if (pr.buildingLevel >= 8) log(room, "🏙️ " + p.name + " 建成【都市】，全场城市地租 ×" + newTownMultiplier(room).toFixed(1) + "！");
     p.cards.splice(idx, 1);
     room.seq++;
     return { ok: true };
@@ -871,8 +884,8 @@
     if (pr.regionsOwned < cell.regionCount) {
       return { kind: "buy", price: nextRegionCost(cell, pr), cell: cell.index };
     }
-    if (pr.buildingLevel < 7) {
-      const lvls = Math.min(2, 7 - pr.buildingLevel);
+    if (pr.buildingLevel < 8) {
+      const lvls = Math.min(2, 8 - pr.buildingLevel);
       return {
         kind: "build", cell: cell.index,
         cost1: buildCost(cell, pr.buildingLevel, pr.buildingLevel + 1),
