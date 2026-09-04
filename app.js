@@ -22,7 +22,7 @@
     ["台州", "天台山", "⛰️"], ["台州", "神仙居", "🌫️"], ["台州", "温岭石塘", "🌊"], ["台州", "临海古城", "🏯"],
     ["舟山", "普陀山", "⛩️"], ["舟山", "朱家尖", "🏖️"], ["舟山", "东极岛", "🌅"], ["舟山", "沈家门渔港", "⚓"]
   ];
-  const BUILD_ICONS = ["", "🏪", "🏬", "🏨", "🏩", "🏢", "🏙️"];
+  const BUILD_ICONS = ["", "🏪", "🏬", "🏨", "🏩", "🏢", "🏙️", "🌆", "🌃"];
   const RULES = [
     "一、目标：游历浙江 12 城，买地、建房、收过路费，把对手耗到破产，最后剩下的玩家获胜。",
     "二、地图：62 格环形地图，含右下起点、左上起点、乔司监狱、卡牌补给站、命运×3、机会×1、空地×4 和 50 个城市地块。开局随机分到右下或左上起点，按顺时针移动。",
@@ -1188,7 +1188,7 @@
     }
     if (cardId === "build") {
       const room = S.room;
-      const targets = BOARD.filter(c => c.t === "prop" && room.props[c.index].owner === S.playerId && room.props[c.index].regionsOwned >= c.regionCount && room.props[c.index].buildingLevel < 6);
+      const targets = BOARD.filter(c => c.t === "prop" && room.props[c.index].owner === S.playerId && room.props[c.index].regionsOwned >= c.regionCount && room.props[c.index].buildingLevel < 8);
       if (!targets.length) { toast("没有可建造的地块（需要自己完全解锁且未满级的地块）"); return; }
       openModal("建造卡 · 选择自己的地块（升 1 级）",
         h("div", { class: "opt-list" }, targets.map(c => h("button", { class: "opt-btn", onclick: () => doCard(cardId, { cell: c.index }) }, c.name + "（" + (ZT.BUILD_NAMES[room.props[c.index].buildingLevel] || "无建筑") + "）"))),
