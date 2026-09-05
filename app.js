@@ -502,7 +502,8 @@
     const endBtn = $("#endTurnBtn");
     if (endBtn) {
       const modalOpen = !$("#modal").classList.contains("hidden");
-      const showEnd = isMe() && !(me() && me().aiManaged) && (room.rolled || cur().skipReason || (room.phase === "landing" && !modalOpen));
+      const inEmergency = room.pending && (room.pending.type === "emergency" || room.pending.type === "pay");
+      const showEnd = isMe() && !(me() && me().aiManaged) && !inEmergency && (room.rolled || cur().skipReason || (room.phase === "landing" && !modalOpen));
       endBtn.classList.toggle("hidden", !showEnd);
     }
     const aiBtn = $("#btnAiManage");
@@ -669,7 +670,7 @@
   }
   // 掷骰子动画播完后再弹结算/购买弹窗，避免挡住骰子点数
   function scheduleLanding() {
-    const key = S.room.turn + ":" + (S.room.pending ? S.room.pending.type : "");
+    const key = S.room.turn + ":" + (S.room.pending ? S.room.pending.type : "") + ":" + S.room.seq;
     if (landingKey === key) return;
     landingKey = key;
     if (landingTimer) clearTimeout(landingTimer);
@@ -867,6 +868,11 @@
   }
   function endTurnNow() {
     if (!isMe()) { toast("还没轮到你"); return; }
+    const pend = S.room.pending;
+    if (pend && (pend.type === "pay" || pend.type === "emergency")) {
+      toast("你还需要先支付过路费，不能结束回合");
+      return;
+    }
     markActivity();
     EN.endTurn(S.room);
     landingMsg = null;
@@ -935,6 +941,19 @@
     if (aiTimer) clearInterval(aiTimer);
     aiTimer = setInterval(aiTick, 800);
   }
+  // 自我超时托管：只有当前回合玩家自己的客户端才判断“45 秒无操作”，避免其他客户端因同步延迟误托管
+  function selfIdleCheck() {
+    if (!S.room || S.room.status !== "playing") return;
+    const cp = cur();
+    if (!cp || cp.id !== S.playerId || cp.isAI || cp.aiManaged) return;
+    if (!S.room.lastActionAt) return;
+    if (Date.now() - S.room.lastActionAt > 45000) {
+      cp.aiManaged = true;
+      S.room.seq++;
+      saveAndBroadcast();
+      render();
+    }
+  }
   function aiTick() {
     if (!isAiDriver() || !S.room || S.room.status !== "playing") return;
     const cp = cur();
@@ -943,9 +962,8 @@
     if (!S.room.turnStartedAt) S.room.turnStartedAt = Date.now();
     if (!S.room.lastActionAt) S.room.lastActionAt = Date.now();
     const elapsed = Date.now() - S.room.turnStartedAt;
-    const idleElapsed = Date.now() - S.room.lastActionAt;
-    // 真人 45 秒无操作 → 自动进入 AI 托管（不再用 presence 心跳判定离线，避免误判）
-    if (!cp.isAI && !cp.aiManaged && idleElapsed > 45000) {
+    // 掉线托管：真人明确掉线（presence 心跳停更）→ 由 AI 驱动客户端托管
+    if (!cp.isAI && !cp.aiManaged && !isOnline(cp)) {
       cp.aiManaged = true;
       S.room.seq++;
       saveAndBroadcast();
@@ -1444,6 +1462,7 @@
   bind();
   renderHome();
   startAiDriver();
+  setInterval(selfIdleCheck, 1000);
   setInterval(refreshPresence, 6000);
   setInterval(function () { sceneIdx++; if (S.room && S.room.status === "playing") renderScenery(); }, 60000);
   setInterval(renderTurnTimer, 1000);
