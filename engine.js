@@ -134,6 +134,8 @@
   function start(room) {
     const aiCount = room.settings.aiCount || 0;
     if (room.status !== "waiting" || (room.players.length + aiCount) < 2) return false;
+    const total = room.players.length + aiCount;
+    if (!Number.isInteger(aiCount) || aiCount < 0 || aiCount > 5 || total > Math.min(room.settings.maxPlayers || 6, 6)) return false;
     const idxB = BOARD.findIndex(function (c) { return c.t === "start" && c.id === "B"; });
     room.players.forEach(function (p) { setupPlayer(room, p, idxB); });
     const aiNames = ["小智", "小灵", "小慧", "小强", "小美"];
