@@ -3,6 +3,7 @@
 
   const ZT = window.ZT;
   const EN = window.ZTEngine;
+  const PRESETS = window.ZTPresets;
   const BOARD = ZT.BOARD;
   const CARDS = ZT.CARDS;
   const TOKEN_COLORS = ["#f43f5e", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf0", "#ec4899"];
@@ -95,6 +96,7 @@
   let roomBusy = false, pendingWrites = 0;
   let joinedAt = 0, presenceCheckedAt = 0;
   let aiActionAt = 0;
+  let settingsBusy = false;
   const roomVersions = new WeakMap();
   const writeEpoch = new Map();
   let writeChain = Promise.resolve();
@@ -476,7 +478,47 @@
     $("#setAI").value = String(room.settings.aiCount);
     $("#setSound").value = room.settings.sound ? "1" : "0";
     $("#setAnim").value = room.settings.anim;
-    $("#btnStart").disabled = !(isHost && (room.players.length + (room.settings.aiCount || 0)) >= 2);
+    renderRoomRules();
+  }
+
+  function renderPresetPreview() {
+    const preset = PRESETS.find($("#rulePreset").value) || PRESETS.find("balanced");
+    $("#presetDescription").textContent = preset.description;
+    $("#presetValues").textContent = PRESETS.summary(preset.settings);
+  }
+  function renderRoomRules() {
+    if (!S.room || S.room.status !== "waiting") return;
+    const room = S.room, isHost = room.host === S.playerId;
+    const current = PRESETS.match(room.settings);
+    const name = current ? current.name : "自定义规则";
+    $("#presetStatus").textContent = settingsBusy ? "正在保存设置…" : "当前设置：" + name;
+    $("#roomRulesSummary").textContent = name + "。" + PRESETS.summary(room.settings) + "。胜利条件：最后一名未破产玩家。";
+    $("#btnApplyPreset").disabled = !isHost || settingsBusy;
+    $$("#hostSettingsCard input, #hostSettingsCard select").forEach(el => { el.disabled = !isHost || settingsBusy; });
+    const hint = PRESETS.capacityError(room);
+    $("#roomCapacityHint").textContent = hint;
+    $("#btnStart").disabled = !isHost || settingsBusy || !!hint;
+    const advice = $("#settingsAdvice"); advice.innerHTML = "";
+    PRESETS.advice(room).forEach(t => advice.appendChild(h("p", {}, t)));
+    renderPresetPreview();
+  }
+  async function applyPreset() {
+    if (!S.room || settingsBusy || pendingWrites) { toast("正在同步房间，请稍候再设置"); return; }
+    const result = PRESETS.apply(S.room, S.playerId, $("#rulePreset").value);
+    if (result.error) { toast(result.error); return; }
+    settingsBusy = true; renderRoom();
+    try {
+      if (await saveAndBroadcast()) toast("已应用" + result.name + "，可继续微调");
+    } finally { settingsBusy = false; if (S.room && S.room.status === "waiting") renderRoom(); }
+  }
+  async function changeRoomSetting(key, input, parse) {
+    if (!S.room || S.room.status !== "waiting" || S.room.host !== S.playerId || settingsBusy) return;
+    if (pendingWrites) { toast("正在同步房间，请稍候再设置"); renderRoom(); return; }
+    if (!input.checkValidity()) { input.reportValidity(); return; }
+    S.room.settings[key] = parse(input.value);
+    settingsBusy = true; renderRoomRules();
+    try { await saveAndBroadcast(); }
+    finally { settingsBusy = false; if (S.room && S.room.status === "waiting") renderRoom(); }
   }
 
   function renderGame() {
@@ -1436,7 +1478,9 @@
     renderHome();
   }
   function startGame() {
-    if (S.room.host !== S.playerId) return;
+    if (!S.room || S.room.host !== S.playerId || S.room.status !== "waiting" || settingsBusy || pendingWrites) return;
+    const invalid = $$("#hostSettingsCard input, #hostSettingsCard select").find(el => !el.checkValidity());
+    if (invalid) { invalid.reportValidity(); return; }
     const room = S.room;
     room.settings.initialMoney = parseInt($("#setMoney").value, 10) || ZT.DEFAULT_MONEY;
     room.settings.maxPlayers = parseInt($("#setMax").value, 10) || 6;
@@ -1446,7 +1490,9 @@
     room.settings.aiCount = parseInt($("#setAI").value, 10) || 0;
     room.settings.sound = $("#setSound").value === "1";
     room.settings.anim = $("#setAnim").value;
-    EN.start(room);
+    const capacityError = PRESETS.capacityError(room);
+    if (capacityError) { toast(capacityError); renderRoom(); return; }
+    if (!EN.start(room)) { toast("当前房间无法开始，请检查玩家人数"); return; }
     // 双保险：确保开局时间戳不为 0，避免 aiTick 误判为“长时间无操作”而立即托管
     room.lastActionAt = Date.now();
     room.turnStartedAt = Date.now();
@@ -1456,6 +1502,8 @@
 
   /* ---------- wiring ---------- */
   function bind() {
+    $("#rulePreset").onchange = renderPresetPreview;
+    $("#btnApplyPreset").onclick = applyPreset;
     $("#btnRetryCloud").onclick = initCloud;
     $("#btnCreate").onclick = createRoom;
     $("#btnRules").onclick = showRules;
@@ -1483,14 +1531,13 @@
     $("#btnAiManage").onclick = toggleAiManage;
     $("#modalClose").onclick = closeModal;
     $("#modal").addEventListener("click", e => { if (e.target === $("#modal")) closeModal(); });
-    $("#setMoney").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.initialMoney = parseInt($("#setMoney").value, 10) || ZT.DEFAULT_MONEY; saveAndBroadcast(); } };
-    $("#setMax").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.maxPlayers = parseInt($("#setMax").value, 10) || 6; saveAndBroadcast(); } };
-    $("#setCards").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.startCards = parseInt($("#setCards").value, 10) || 0; saveAndBroadcast(); } };
-    $("#setCityBonus").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.cityBonusStep = parseFloat($("#setCityBonus").value) || 0.2; saveAndBroadcast(); } };
-    $("#setStartReward").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.startReward = parseInt($("#setStartReward").value, 10) || ZT.START_REWARD; saveAndBroadcast(); } };
-    $("#setAI").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.aiCount = parseInt($("#setAI").value, 10) || 0; S.room.seq++; saveAndBroadcast(); render(); } };
-    $("#setSound").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.sound = $("#setSound").value === "1"; saveAndBroadcast(); } };
-    $("#setAnim").onchange = () => { if (S.room && S.room.host === S.playerId) { S.room.settings.anim = $("#setAnim").value; saveAndBroadcast(); } };
+    const settingInputs = [
+      ["#setMoney", "initialMoney", Number], ["#setMax", "maxPlayers", Number],
+      ["#setCards", "startCards", Number], ["#setCityBonus", "cityBonusStep", Number],
+      ["#setStartReward", "startReward", Number], ["#setAI", "aiCount", Number],
+      ["#setSound", "sound", v => v === "1"], ["#setAnim", "anim", String]
+    ];
+    settingInputs.forEach(([id, key, parse]) => { const input = $(id); input.onchange = () => changeRoomSetting(key, input, parse); });
   }
 
   bind();
