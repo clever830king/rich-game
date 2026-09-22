@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#2f7d5b" />
   <title>大富翁之金聪明游浙江</title>
-  <link rel="stylesheet" href="styles.css?v=1.7.0" />
+  <link rel="stylesheet" href="styles.css?v=1.8.0" />
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/latest/cloudbase.full.js"></script>
   <script>
     window.addEventListener("error", function (e) {
@@ -64,9 +64,25 @@
       <div class="card">
         <h3 class="sec-title">玩家（<span id="playerCount">0</span>/<span id="maxPlayers">6</span>）</h3>
         <div id="roomPlayers" class="room-players"></div>
+        <p id="roomRulesSummary" class="room-rules-summary" aria-live="polite"></p>
       </div>
       <div class="card" id="hostSettingsCard">
         <h3 class="sec-title">房间设置（房主）</h3>
+        <div class="preset-section">
+          <label class="preset-label" for="rulePreset">选择推荐方案</label>
+          <div class="preset-controls">
+            <select id="rulePreset" class="set-input" aria-describedby="presetDescription presetValues">
+              <option value="balanced">均衡朋友局（推荐）</option>
+              <option value="competitive">紧凑竞争局</option>
+              <option value="classic">原版经典局</option>
+            </select>
+            <button id="btnApplyPreset" class="btn btn-primary">应用方案</button>
+          </div>
+          <p id="presetDescription" class="preset-description"></p>
+          <p id="presetValues" class="preset-values"></p>
+          <p id="presetStatus" class="preset-status" role="status" aria-live="polite"></p>
+          <p class="preset-timing">以最后一名未破产玩家获胜；仅调参数无法保证 30～45 分钟结束。</p>
+        </div>
         <label class="set-row"><span>初始资金</span><input id="setMoney" type="number" min="1000" max="100000" step="1000" class="set-input" /></label>
         <label class="set-row"><span>玩家上限</span><select id="setMax" class="set-input"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option></select></label>
         <label class="set-row"><span>开局特殊卡牌</span><select id="setCards" class="set-input"><option selected>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
@@ -75,7 +91,9 @@
         <label class="set-row"><span>增加电脑玩家</span><select id="setAI" class="set-input"><option value="0" selected>0 个</option><option value="1">1 个</option><option value="2">2 个</option><option value="3">3 个</option><option value="4">4 个</option><option value="5">5 个</option></select></label>
         <label class="set-row"><span>音效</span><select id="setSound" class="set-input"><option value="1" selected>开</option><option value="0">关</option></select></label>
         <label class="set-row"><span>动画速度</span><select id="setAnim" class="set-input"><option value="fast" selected>快</option><option value="normal">正常</option></select></label>
+        <div id="settingsAdvice" class="settings-advice" aria-live="polite"></div>
       </div>
+      <p id="roomCapacityHint" class="room-capacity-hint" role="status" aria-live="polite"></p>
       <button class="btn btn-primary btn-lg btn-block" id="btnStart" disabled>开始游戏</button>
     </div>
   </div>
@@ -129,10 +147,12 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <div class="version-footer">大富翁之金聪明游浙江 · v1.7.0</div>
+  <div class="version-footer">大富翁之金聪明游浙江 · v1.8.0</div>
 
-  <script src="data.js?v=1.7.0"></script>
-  <script src="engine.js?v=1.7.0"></script>
-  <script src="app.js?v=1.7.0"></script>
+  <script src="data.js?v=1.8.0"></script>
+  <script src="presets.js?v=1.8.0"></script>
+  <script src="engine.js?v=1.8.0"></script>
+  <script src="app.js?v=1.8.0"></script>
 </body>
 </html>
+
