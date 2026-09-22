@@ -371,3 +371,19 @@ input { caret-color: var(--primary); }
   .board-wrap::before { content: "左右滑动棋盘，查看完整地图"; display: block; position: sticky; left: 0; padding: 6px 12px; color: var(--muted); font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* Host recommendations retain the existing room layout and palette. */
+.preset-section { padding: 4px 0 18px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+.preset-label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; }
+.preset-controls { display: flex; gap: 10px; align-items: stretch; }
+.preset-controls .set-input { flex: 1; min-width: 0; width: auto; }
+.preset-controls .btn { flex-shrink: 0; }
+.preset-description, .preset-values, .preset-status, .preset-timing, .room-rules-summary, .settings-advice p, .room-capacity-hint { font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.preset-description { margin: 12px 0 6px; color: var(--text); }
+.preset-values { margin: 0; color: var(--primary); font-variant-numeric: tabular-nums; }
+.preset-status { margin: 10px 0 0; font-weight: 600; }
+.preset-timing { color: var(--muted); margin: 6px 0 0; }
+.room-rules-summary { margin: 14px 0 0; color: var(--muted); }
+.settings-advice p { color: #83551d; margin: 12px 0 0; }
+.room-capacity-hint { color: #934039; margin: 8px 0 12px; }
+.room-capacity-hint:empty { display: none; }
