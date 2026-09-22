@@ -339,3 +339,35 @@ body.timer-urgent { animation: urgentBorder 0.8s ease-in-out infinite; }
 @media (min-width: 720px) {
   .board { min-width: 1360px; }
 }
+
+/* v1.7: connection feedback and readable room entry */
+:root { --muted: #58675e; }
+.home-inner { max-width: 480px; padding-top: clamp(24px, 5vh, 56px); }
+.home-card { margin-top: 18px; padding: 24px; }
+.game-title { text-wrap: balance; }
+.avatar-row { max-height: 100px; overflow-y: auto; padding: 3px; scrollbar-color: #a8b6ac transparent; }
+.conn-status { max-width: 100%; overflow-wrap: anywhere; border-radius: 10px; }
+#btnRetryCloud { margin-top: 10px; }
+.quick-guide { text-align: left; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+.quick-guide summary { color: var(--text); font-weight: 600; cursor: pointer; padding: 8px 0; }
+.quick-guide li { margin-bottom: 10px; }
+.quick-guide ol { padding-left: 22px; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+.btn:disabled { cursor: wait; opacity: .55; }
+.join-row input { min-width: 0; }
+.join-row button { flex-shrink: 0; }
+.pc-money, .room-code, .turn-timer { font-variant-numeric: tabular-nums; }
+::selection { background: #cce4d6; color: #183b29; }
+input { caret-color: var(--primary); }
+@media (max-width: 600px) {
+  .home-inner { padding-inline: 16px; }
+  .home-card { padding: 18px; }
+  .game-title { font-size: 27px; }
+  .hud { flex-wrap: wrap; gap: 10px; }
+  .hud-left { flex: 1 1 100%; flex-wrap: wrap; }
+  .hud-mid { flex: 1 1 45%; min-width: 0; text-align: left; }
+  .hud-turn { white-space: normal; }
+  .chat-input-row input { min-width: 0; }
+  .board-wrap::before { content: "左右滑动棋盘，查看完整地图"; display: block; position: sticky; left: 0; padding: 6px 12px; color: var(--muted); font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
