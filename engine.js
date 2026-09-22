@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   "use strict";
 
   const ZT = window.ZT;
@@ -267,6 +267,7 @@
   // ===== 回合 =====
   function roll(room) {
     const p = currentPlayer(room);
+    if (room.status !== "playing" || room.phase !== "action" || room.rolled || !p || p.bankrupt || p.skipReason) return { error: "现在不能掷骰" };
     let d;
     if (room.pendingCheat != null) { d = room.pendingCheat; room.pendingCheat = null; }
     else d = moveDie();
@@ -387,7 +388,7 @@
   function resolve(room, action) {
     const p = currentPlayer(room);
     const pend = room.pending;
-    if (!pend) { endTurn(room); return; }
+    if (!pend || room.phase !== "landing" || room.status !== "playing") return { error: "没有待结算事件" };
     action = action || {};
     switch (pend.type) {
       case "none":
@@ -603,6 +604,7 @@
   }
 
   function endTurn(room) {
+    if (room.pending && ["pay", "emergency"].includes(room.pending.type)) return { error: "请先结清过路费" };
     room.pending = null;
     room.dice = null;
     room.jailRoll = null;
@@ -627,6 +629,9 @@
       if (room.turn === 0) room.round++;
       const p = currentPlayer(room);
       if (p.bankrupt) continue;
+      room.turnStartedAt = Date.now();
+      room.lastActionAt = room.turnStartedAt;
+      room.rolled = false;
       if (p.jailSkip > 0) { p.skipReason = "jail"; p.jailSkip--; log(room, p.name + " 在乔司监狱停留一回合"); room.seq++; return; }
       if (p.paused > 0) { p.skipReason = "pause"; p.paused--; log(room, p.name + " 被命运暂停一回合"); room.seq++; return; }
       p.skipReason = null;
@@ -641,6 +646,7 @@
   }
 
   function skipTurn(room) {
+    if (room.pending && ["pay", "emergency"].includes(room.pending.type)) return { error: "请先结清过路费" };
     const p = currentPlayer(room);
     p.skipReason = null;
     room.phase = "action";
@@ -648,6 +654,8 @@
   }
 
   function forceEndTurn(room) {
+    if (room.pending && ["pay", "emergency"].includes(room.pending.type)) return { error: "请先结清过路费" };
+    room.rolled = false;
     const p = currentPlayer(room);
     p.skipReason = null;
     room.pending = null;
@@ -672,7 +680,7 @@
   function useCard(room, playerId, cardId, opts) {
     const p = playerById(room, playerId);
     if (!p) return { error: "玩家不存在" };
-    if (room.phase !== "action" || currentPlayer(room).id !== playerId) return { error: "现在不能使用卡牌" };
+    if (room.phase !== "action" || room.rolled || p.skipReason || currentPlayer(room).id !== playerId) return { error: "现在不能使用卡牌" };
     const idx = p.cards.indexOf(cardId);
     if (idx < 0) return { error: "没有这张卡" };
     opts = opts || {};
@@ -833,7 +841,7 @@
   // ===== 抵押（主动，回合开始阶段）=====
   function mortgage(room, playerId, cellIndex) {
     const p = playerById(room, playerId);
-    if (!p || room.phase !== "action" || currentPlayer(room).id !== playerId) return { error: "现在不能抵押" };
+    if (!p || room.phase !== "action" || room.rolled || p.skipReason || currentPlayer(room).id !== playerId) return { error: "现在不能抵押" };
     const cell = BOARD[cellIndex];
     if (!cell || cell.t !== "prop") return { error: "只能抵押城市地块" };
     const pr = room.props[cellIndex];
@@ -850,7 +858,7 @@
   // ===== 抵押卡牌（一张卡 ¥5000）=====
   function mortgageCard(room, playerId, cardId) {
     const p = playerById(room, playerId);
-    if (!p || room.phase !== "action" || currentPlayer(room).id !== playerId) return { error: "现在不能抵押" };
+    if (!p || room.phase !== "action" || room.rolled || p.skipReason || currentPlayer(room).id !== playerId) return { error: "现在不能抵押" };
     const idx = p.cards.indexOf(cardId);
     if (idx < 0) return { error: "没有这张卡" };
     p.cards.splice(idx, 1);

@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#8b5cf6" />
+  <meta name="theme-color" content="#2f7d5b" />
   <title>大富翁之金聪明游浙江</title>
-  <link rel="stylesheet" href="styles.css?v=1.6" />
+  <link rel="stylesheet" href="styles.css?v=1.7.0" />
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/latest/cloudbase.full.js"></script>
   <script>
     window.addEventListener("error", function (e) {
@@ -23,7 +23,8 @@
       <div class="game-logo">🗺️</div>
       <h1 class="game-title">大富翁之金聪明游浙江</h1>
       <p class="game-sub">多人联机大富翁 · 游历浙江 12 城</p>
-      <p class="conn-status" id="connStatus">正在连接云端…</p>
+      <p class="conn-status" id="connStatus" role="status" aria-live="polite">正在连接云端…</p>
+      <button id="btnRetryCloud" class="btn btn-ghost hidden">重新连接</button>
       <div class="home-card">
         <div class="field">
           <span>选择头像</span>
@@ -37,7 +38,7 @@
         <button class="btn btn-ghost btn-block" id="btnRules">📖 游戏规则</button>
         <div class="divider">或</div>
         <div class="join-row">
-          <input id="inCode" type="text" maxlength="4" placeholder="房间号" style="text-transform:uppercase" />
+          <input id="inCode" aria-label="4 位房间号" autocomplete="off" autocapitalize="characters" type="text" maxlength="4" placeholder="房间号" style="text-transform:uppercase" />
           <button class="btn btn-ghost" id="btnJoin">加入房间</button>
         </div>
         <div id="reconnect" class="reconnect hidden">
@@ -45,7 +46,8 @@
           <button class="btn btn-ghost btn-sm" id="btnReconnect">重新连接</button>
         </div>
       </div>
-      <p class="home-note">已接入腾讯云实时联机：手机和电脑输入同一房间号即可一起玩，首次进入稍等 1~2 秒完成连接。</p>
+      <p class="home-note">等待上方显示「云端已连接」，再创建或加入房间。朋友使用同一网址和 4 位房间号，即可跨设备同玩。</p>
+      <details class="quick-guide"><summary>第一次玩？一分钟了解玩法</summary><ol><li>选头像、填昵称，创建房间并分享房间号。</li><li>房主可添加电脑玩家；所有人进入后开始游戏。</li><li>轮到你时掷骰，落地后买地、建设或支付过路费。</li><li>结算后点击「结束回合」。需要离开时可开启托管，回来后点击「取消托管」。</li></ol><p>无法加入？先确认双方均显示云端已连接，且房间尚未开始；手机建议在浏览器中打开。</p></details>
     </div>
   </div>
 
@@ -127,10 +129,10 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <div class="version-footer">大富翁之金聪明游浙江 · v1.6</div>
+  <div class="version-footer">大富翁之金聪明游浙江 · v1.7.0</div>
 
-  <script src="data.js?v=1.6"></script>
-  <script src="engine.js?v=1.6"></script>
-  <script src="app.js?v=1.6"></script>
+  <script src="data.js?v=1.7.0"></script>
+  <script src="engine.js?v=1.7.0"></script>
+  <script src="app.js?v=1.7.0"></script>
 </body>
 </html>
