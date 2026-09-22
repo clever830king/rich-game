@@ -37,8 +37,8 @@
     "十一、乔司监狱：进入掷骰，单数直接离开、双数下回合停留一回合。",
     "十二、抵押：只能在掷骰子前主动抵押（整块地块返还 50%，卡牌每张 ¥5000，两者都会随新城+都市倍率同步翻倍）；落地付不起过路费时可进入紧急抵押，抵押掉不重要的地块/卡牌再付钱，仍不够则破产退出。",
     "十三、时间限制：掷骰子后不能主动用卡牌、抵押、建设；只有付不起过路费时才能紧急抵押。",
-    "十四、AI 托管：左上角可手动开启/关闭；玩家 45 秒无操作会自动进入 AI 托管（最后 10 秒页面边框闪烁变红），任意操作即可退出托管。",
-    "十五、结算：空地、起点、命运、机会、监狱等结算会自动完成并进入下一位玩家，不需要手动跳过。"
+    "十四、AI 托管：自己的回合 45 秒未操作将自动托管；点击「取消托管」即可接回。AI 会保留周转资金，紧急支付时优先抵押卡牌，再抵押地产；托管期间不会主动使用特殊卡。",
+    "十五、结算：事件结算后点击绿色「结束回合」交给下一位玩家；托管玩家自动结束回合。欠过路费时必须先支付或处理紧急抵押。"
   ];
 
   const BGM_TRACKS = [
@@ -90,6 +90,13 @@
   let landingMsg = null;
   let CLOUD_DB = null;
   let CLOUD_READY = false;
+  let presenceCollection = "presence";
+  let cloudTask = null, cloudState = "connecting", cloudError = "";
+  let roomBusy = false, pendingWrites = 0;
+  let joinedAt = 0, presenceCheckedAt = 0;
+  let aiActionAt = 0;
+  const roomVersions = new WeakMap();
+  const writeEpoch = new Map();
   let writeChain = Promise.resolve();
   let LOCAL_CHANNEL = null;
   function localKey(code) { return "zt_room_" + code; }
@@ -100,20 +107,25 @@
   function localGet(code) {
     try { const s = localStorage.getItem(localKey(code)); return s ? JSON.parse(s) : null; } catch (e) { return null; }
   }
-  function isLocal() { return !CLOUD_READY; }
+  function isLocal() { return false; }
   function updateConnStatus() {
     const el = $("#connStatus");
     if (!el) return;
-    if (CLOUD_READY) {
-      el.textContent = "✅ 云端联机已连接（可跨设备联机）";
-      el.className = "conn-status ok";
-    } else if (CLOUD_DB) {
-      el.textContent = "⏳ 正在连接云端…";
-      el.className = "conn-status";
-    } else {
-      el.textContent = "⚠️ 本地模式（无法跨设备联机，请检查腾讯云：匿名登录/数据库权限/安全域名）";
-      el.className = "conn-status warn";
-    }
+    el.textContent = CLOUD_READY ? "云端已连接 · 可以跨设备联机" :
+      cloudState === "connecting" ? "正在连接云端，请稍候…" : "连接失败：" + cloudError;
+    el.className = "conn-status " + (CLOUD_READY ? "ok" : cloudState === "error" ? "warn" : "");
+    ["#btnCreate", "#btnJoin", "#btnReconnect"].forEach(id => { $(id).disabled = !CLOUD_READY || roomBusy; });
+    const retry = $("#btnRetryCloud");
+    if (retry) { retry.classList.toggle("hidden", cloudState !== "error"); retry.disabled = !!cloudTask; }
+  }
+  function checked(res) {
+    if (res && (res.error || res.code)) throw new Error(res.error?.message || res.message || res.code);
+    return res;
+  }
+  function timeout(promise, ms, label) {
+    let timer;
+    return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label)), ms); })])
+      .finally(() => clearTimeout(timer));
   }
 
   const $ = (s, r) => (r || document).querySelector(s);
@@ -153,7 +165,15 @@
   function saveSession() { localStorage.setItem(LS_SESSION, JSON.stringify({ code: S.code, playerId: S.playerId, name: S.name })); }
   function clearSession() { localStorage.removeItem(LS_SESSION); }
   function roomRef(code) { return CLOUD_DB.collection("rooms").doc(code); }
-  function presenceRef(code, pid) { return CLOUD_DB.collection("presence").doc(code + "_" + pid); }
+  // Query responses wrap data in an array, so the room's `code` field cannot
+  // be mistaken for a CloudBase API error code by the SDK's document reader.
+  function readRoom(code) {
+    return CLOUD_DB.collection("rooms").where({ code }).limit(20).get().then(res => {
+      checked(res);
+      return { data: (Array.isArray(res.data) ? res.data : []).filter(r => r._id === code && Array.isArray(r.players)) };
+    });
+  }
+  function presenceRef(code, pid) { return CLOUD_DB.collection(presenceCollection).doc("__presence_" + code + "_" + pid); }
   function cleanRoom(room) {
     const o = JSON.parse(JSON.stringify(room));
     delete o._id;
@@ -162,36 +182,48 @@
   }
   function extractDoc(res) {
     const d = res && res.data;
-    if (Array.isArray(d)) return d[0] || null;
-    return d || null;
+    const room = Array.isArray(d) ? d[0] || null : d || null;
+    if (room && room.code) roomVersions.set(room, room.seq);
+    return room;
   }
   function fetchRoom(code) {
-    if (!code) return Promise.resolve(null);
+    if (!code || !CLOUD_READY) return Promise.resolve(null);
     if (isLocal()) return Promise.resolve(localGet(code));
-    return roomRef(code).get().then(function (res) {
+    return readRoom(code).then(function (res) {
       if (res && res.code) { console.warn("读房间失败", res.code, res.message); return null; }
       return extractDoc(res);
     }).catch(() => null);
   }
   function saveRoomToCloud(room) {
-    if (!room || !room.code) return;
-    if (isLocal()) { localSave(room); return; }
-    const code = room.code;
+    if (!room || !room.code || !CLOUD_READY) return Promise.resolve(false);
+    const code = room.code, expected = roomVersions.get(room);
+    const epoch = writeEpoch.get(code) || 0;
+    room.seq = Math.max(room.seq || 0, expected == null ? 0 : expected + 1);
     const data = cleanRoom(room);
-    writeChain = writeChain
-      .then(() => roomRef(code).set(data))
-      .then(res => {
-        if (res && res.code) {
-          console.warn("写入房间失败", res.code, res.message);
-          toast("保存失败 " + (res.code || "") + " " + (res.message || ""));
-        }
-      })
-      .catch(e => {
-        console.warn("写入房间失败", e);
-        toast("保存失败 " + (e && (e.code || e.message) || ""));
-      });
+    roomVersions.set(room, data.seq);
+    pendingWrites++;
+    const task = writeChain.then(async () => {
+      if ((writeEpoch.get(code) || 0) !== epoch) throw new Error("状态已更新，请重试操作");
+      if (expected == null) {
+        return checked(await timeout(CLOUD_DB.collection("rooms").add({ ...data, _id: code }), 15000, "创建房间超时"));
+      }
+      const update = {};
+      Object.keys(data).forEach(key => { update[key] = CLOUD_DB.command.set(data[key]); });
+      const result = checked(await timeout(CLOUD_DB.collection("rooms").where({ _id: code, seq: expected }).update(update), 15000, "保存超时，请检查网络"));
+      if (result.updated !== 1) throw new Error("其他玩家已更新房间，本次操作未提交，请重试");
+      return result;
+    });
+    writeChain = task.catch(() => {});
+    return task.then(() => true).catch(async e => {
+      writeEpoch.set(code, epoch + 1);
+      const remote = await fetchRoom(code);
+      if (remote && S.code === code) { S.room = remote; closeModal(); render(); }
+      toast("保存失败：" + e.message);
+      return false;
+    }).finally(() => { pendingWrites--; });
   }
-  function saveAndBroadcast() { saveRoomToCloud(S.room); }
+  function saveAndBroadcast() { return saveRoomToCloud(S.room); }
+
   function watchRoom(code) {
     unwatchRoom();
     if (!code) return;
@@ -234,9 +266,9 @@
       if (r && S.room && r.seq > S.room.seq) { S.room = r; render(); }
       return;
     }
-    roomRef(code).get().then(function (res) {
+    readRoom(code).then(function (res) {
       const remote = extractDoc(res);
-      if (!remote) return;
+      if (!remote || S.code !== code || pendingWrites) return;
       if (!S.room) { S.room = remote; render(); return; }
       if (remote.seq > S.room.seq) { S.room = remote; render(); }
     }).catch(function (e) { console.warn("拉取房间失败", e); });
@@ -244,85 +276,58 @@
   function heartbeat() {
     if (!CLOUD_DB || !S.code || !S.playerId) return;
     presenceRef(S.code, S.playerId)
-      .set({ code: S.code, playerId: S.playerId, name: S.name || "", lastSeen: Date.now() })
+      .set({ kind: "presence", code: S.code, playerId: S.playerId, name: S.name || "", lastSeen: Date.now() })
       .catch(function (e) { console.warn("心跳失败", e); });
   }
   function startHeartbeat() { stopHeartbeat(); if (!S.playerId || !S.code) return; heartbeat(); hbTimer = setInterval(heartbeat, 5000); }
   function stopHeartbeat() { if (hbTimer) { clearInterval(hbTimer); hbTimer = null; } }
   function refreshPresence() {
-    if (!CLOUD_DB || !S.code) return;
-    CLOUD_DB.collection("presence").where({ code: S.code }).get().then(function (res) {
+    if (!CLOUD_READY || !S.code) return;
+    const code = S.code;
+    CLOUD_DB.collection(presenceCollection).where({ code, kind: "presence" }).get().then(checked).then(function (res) {
+      if (S.code !== code) return;
       const arr = Array.isArray(res.data) ? res.data : [];
-      arr.forEach(function (d) { if (d && d.playerId) S.seen[d.playerId] = d.lastSeen || 0; });
+      const seen = {};
+      arr.forEach(d => { if (d && d.playerId) seen[d.playerId] = d.lastSeen || 0; });
+      S.seen = seen;
+      presenceCheckedAt = Date.now();
       if (S.room) updatePresence();
     }).catch(function () {});
   }
   function initCloud() {
-    if (typeof window.cloudbase === "undefined") {
-      toast("联机组件加载失败，请检查网络");
-      updateConnStatus();
-      return Promise.resolve();
-    }
-    const opts = { env: CLOUD_ENV, region: "ap-shanghai" };
-    if (CLOUD_ACCESS_KEY) opts.accessKey = CLOUD_ACCESS_KEY;
-    let app, db;
-    try {
-      app = window.cloudbase.init(opts);
-      db = app.database();
-      CLOUD_DB = db;
-      updateConnStatus();
-    } catch (e) {
-      console.warn("CloudBase 初始化失败", e);
-      toast("联机服务初始化失败");
-      updateConnStatus();
-      return Promise.resolve();
-    }
-    if (CLOUD_ACCESS_KEY) { verifyDb(); return Promise.resolve(); }
-    const a = (typeof app.auth === "function") ? app.auth({ persistence: "local" }) : app.auth;
-    const doLogin = (a && typeof a.signInAnonymously === "function")
-      ? a.signInAnonymously()
-      : ((a && typeof a.anonymousAuthProvider === "function") ? a.anonymousAuthProvider().signIn() : Promise.resolve());
-    return doLogin.then(function (r) {
-      if (r && r.error) { console.warn("匿名登录失败", r.error.code || r.error); CLOUD_DB = null; updateConnStatus(); toast("联机登录失败：请确认已开启“匿名登录”"); return r; }
-      verifyDb();
-      return r;
-    }).catch(function (e) { console.warn("匿名登录异常", e); toast("联机登录失败，请检查网络"); });
-  }
-  function verifyDb() {
-    if (!CLOUD_DB) return;
-    CLOUD_DB.collection("rooms").limit(1).get().then(function (res) {
-      if (res && res.code) {
-        console.warn("读权限失败", res.code, res.message);
-        CLOUD_DB = null;
-        updateConnStatus();
-        toast("云端读失败 " + res.code + "，已切换本地模式");
-        return;
+    if (cloudTask) return cloudTask;
+    cloudState = "connecting"; cloudError = ""; CLOUD_READY = false;
+    updateConnStatus();
+    cloudTask = timeout((async function () {
+      if (!window.cloudbase) throw new Error("联机组件未加载，请刷新页面后重试");
+      const opts = { env: CLOUD_ENV, region: "ap-shanghai" };
+      if (CLOUD_ACCESS_KEY) opts.accessKey = CLOUD_ACCESS_KEY;
+      const app = window.cloudbase.init(opts);
+      if (!CLOUD_ACCESS_KEY) {
+        const auth = typeof app.auth === "function" ? app.auth({ persistence: "local" }) : app.auth;
+        if (auth && typeof auth.signInAnonymously === "function") checked(await auth.signInAnonymously());
+        else if (auth && typeof auth.anonymousAuthProvider === "function") checked(await auth.anonymousAuthProvider().signIn());
+        else throw new Error("联机组件不支持匿名登录，请刷新页面");
       }
-      const testRef = CLOUD_DB.collection("rooms").doc("__perm_test__");
-      testRef.set({ t: Date.now() }).then(function (res2) {
-        if (res2 && res2.code) {
-          console.warn("写权限失败", res2.code, res2.message);
-          CLOUD_DB = null;
-          updateConnStatus();
-          toast("云端写失败 " + res2.code + "，已切换本地模式");
-        } else {
-          CLOUD_READY = true;
-          testRef.remove().catch(function () {});
-          updateConnStatus();
-          if (S.room) { saveRoomToCloud(S.room); }
-        }
-      }).catch(function (e) {
-        console.warn("写权限异常", e);
-        CLOUD_DB = null;
-        updateConnStatus();
-        toast("云端写异常，已切换本地模式");
-      });
-    }).catch(function (e) {
-      console.warn("数据库访问失败", e);
-      CLOUD_DB = null;
-      updateConnStatus();
-      toast("云端读异常，已切换本地模式");
-    });
+      const db = app.database();
+      await db.collection("rooms").limit(1).get().then(checked);
+      let presence = "presence";
+      try { await db.collection("presence").limit(1).get().then(checked); }
+      catch (e) {
+        if (!/Db or Table not exist|DATABASE_COLLECTION_NOT_EXIST|collection.*not.*exist/i.test(e.message || "")) throw e;
+        presence = "rooms";
+      }
+      return { db, presence };
+    })(), 20000, "连接超时，请检查网络后重试").then(result => {
+      CLOUD_DB = result.db; presenceCollection = result.presence; CLOUD_READY = true; cloudState = "ready";
+      checkReconnect();
+      return true;
+    }).catch(e => {
+      CLOUD_DB = null; CLOUD_READY = false; cloudState = "error";
+      cloudError = e.message || "请检查网络、匿名登录和安全域名设置";
+      return false;
+    }).finally(() => { cloudTask = null; updateConnStatus(); });
+    return cloudTask;
   }
 
   /* ---------- helpers ---------- */
@@ -334,7 +339,12 @@
   function isMe() { return S.room && S.room.status === "playing" && cur() && cur().id === S.playerId; }
   function isMyTurn() { return isMe() && S.room.phase === "action"; }
   function colorOf(p) { const i = S.room.players.indexOf(p); return TOKEN_COLORS[i % TOKEN_COLORS.length]; }
-  function isOnline(p) { if (isLocal()) return true; if (p.id === S.playerId) return true; const seen = S.seen[p.id]; if (!seen) return true; return seen > Date.now() - 45000; }
+  function isOnline(p) {
+    if (p.isAI || p.id === S.playerId) return true;
+    if (!presenceCheckedAt || Date.now() - presenceCheckedAt > 15000) return true;
+    const seen = S.seen[p.id];
+    return seen ? seen > Date.now() - 45000 : Date.now() - joinedAt < 45000;
+  }
   function openModal(title, body, foot) {
     $("#modalTitle").textContent = title;
     const b = $("#modalBody"); b.innerHTML = ""; b.appendChild(body);
@@ -433,7 +443,7 @@
   function checkReconnect() {
     const sess = readSession();
     const rec = $("#reconnect");
-    if (!sess || !sess.code) { rec.classList.add("hidden"); rec._sess = null; return; }
+    if (!CLOUD_READY || !sess || !sess.code) { rec.classList.add("hidden"); rec._sess = null; return; }
     fetchRoom(sess.code).then(function (room) {
       if (room && room.status !== "ended" && playerById(room, sess.playerId)) { rec.classList.remove("hidden"); rec._sess = sess; }
       else { rec.classList.add("hidden"); rec._sess = null; }
@@ -546,7 +556,7 @@
       h("div", { class: "board-center-sub" }, "游历浙江 12 城"),
       h("div", { class: "scenery", id: "scenery" }),
       h("div", { class: "center-log", id: "centerLog" }),
-      h("div", { class: "center-log-hint" }, "若卡在结算中，请耐心等待 10 秒，会自动跳过回合")
+      h("div", { class: "center-log-hint" }, "结算后点击「结束回合」；45 秒未操作会托管，可随时点击「取消托管」接回")
     ));
     const curCell = cur() ? cur().pos : -1;
     BOARD.forEach(c => {
@@ -660,11 +670,12 @@
   let landingTimer = null, landingKey = null;
   function scheduleAutoResolve(delay) {
     if (autoTimer) clearTimeout(autoTimer);
+    const expectedRoom = S.room, expectedPending = S.room.pending;
     autoTimer = setTimeout(function () {
       autoTimer = null;
-      if (S.room && isMe() && S.room.phase === "landing" && S.room.pending) {
+      if (S.room === expectedRoom && S.room.pending === expectedPending && isMe() && !me().aiManaged && S.room.phase === "landing") {
         landingMsg = null;
-        doneLanding({});
+        doneLanding({}, true);
       }
     }, delay || 1500);
   }
@@ -899,7 +910,9 @@
     const p = me();
     if (!p) return;
     p.aiManaged = !p.aiManaged;
-    S.room.lastActionAt = Date.now();
+    if (isMe()) S.room.lastActionAt = Date.now();
+    if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+    closeModal();
     S.room.seq++;
     saveAndBroadcast();
     render();
@@ -908,7 +921,7 @@
   // 玩家任何操作都视为活动：重置倒计时，并自动退出 AI 托管
   function markActivity() {
     if (!S.room) return;
-    S.room.lastActionAt = Date.now();
+    if (isMe()) S.room.lastActionAt = Date.now();
     S.room.seq++;
     const p = me();
     if (p && p.aiManaged) {
@@ -923,11 +936,11 @@
   /* ---------- AI 接管（掉线 / AI 玩家自动代打） ---------- */
   let aiTimer = null;
   function isAiDriver() {
-    if (!S.room) return false;
+    if (!S.room || pendingWrites || !presenceCheckedAt || Date.now() - presenceCheckedAt > 15000) return false;
     const host = playerById(S.room, S.room.host);
-    if (host && isOnline(host)) return S.room.host === S.playerId;
+    if (host && !host.isAI && isOnline(host)) return S.room.host === S.playerId;
     // 房主掉线：由序号最小的在线玩家接管 AI 驱动
-    const online = S.room.players.filter(function (p) { return !p.bankrupt && isOnline(p); });
+    const online = S.room.players.filter(function (p) { return !p.isAI && isOnline(p); });
     if (!online.length) return false;
     online.sort(function (a, b) { return S.room.players.indexOf(a) - S.room.players.indexOf(b); });
     return online[0].id === S.playerId;
@@ -943,7 +956,7 @@
   }
   // 自我超时托管：只有当前回合玩家自己的客户端才判断“45 秒无操作”，避免其他客户端因同步延迟误托管
   function selfIdleCheck() {
-    if (!S.room || S.room.status !== "playing") return;
+    if (!S.room || S.room.status !== "playing" || pendingWrites) return;
     const cp = cur();
     if (!cp || cp.id !== S.playerId || cp.isAI || cp.aiManaged) return;
     if (!S.room.lastActionAt) return;
@@ -969,8 +982,10 @@
       saveAndBroadcast();
       render();
     }
-    const shouldAct = (cp.isAI || cp.aiManaged) ? elapsed > 1200 : false;
+    const shouldAct = (cp.isAI || cp.aiManaged) && elapsed > 1600 && Date.now() - aiActionAt > 1600 &&
+      (S.room.phase !== "landing" || Date.now() - S.room.landingStartedAt > 1600);
     if (!shouldAct) return;
+    aiActionAt = Date.now();
     if (S.room.phase === "action" && !S.room.rolled) aiAct();
     else if (S.room.phase === "landing" && S.room.pending) aiResolve();
     else if (S.room.phase === "action" && S.room.rolled) { EN.endTurn(S.room); saveAndBroadcast(); render(); }
@@ -984,22 +999,30 @@
   function aiResolve() {
     const pend = S.room.pending;
     const p = cur();
+    const reserve = Math.max(1000, Math.round(S.room.settings.startReward * EN.startRewardMultiplier(S.room) * 0.5));
+    const spendable = Math.max(0, p.money - reserve);
     let action = {};
     switch (pend.type) {
-      case "buy": action = { buy: p.money >= pend.price }; break;
-      case "buy-whole": action = { buy: p.money >= pend.price }; break;
+      case "buy": action = { buy: spendable >= pend.price }; break;
+      case "buy-whole": action = { buy: spendable >= pend.price }; break;
       case "build":
-        if (pend.cost2 != null && p.money >= pend.cost2) action = { levels: 2 };
-        else if (pend.cost1 != null && p.money >= pend.cost1) action = { levels: 1 };
+        if (pend.cost2 != null && spendable >= pend.cost2) action = { levels: 2 };
+        else if (pend.cost1 != null && spendable >= pend.cost1) action = { levels: 1 };
         else action = { levels: 0 };
         break;
       case "pay": action = (pend.canBoss && p.boss > 0) ? { boss: true } : {}; break;
-      case "opportunity": action = { grasp: p.money >= (pend.card.invest || 0) && Math.random() < 0.5 }; break;
+      case "opportunity": {
+        const c = pend.card, investment = c.invest || 0;
+        const win = c.winPct ? Math.round(p.money * c.winPct / 100) : (c.win || 0);
+        const loss = c.losePct ? Math.round(p.money * c.losePct / 100) : (c.lose || 0);
+        action = { grasp: spendable >= Math.max(investment, loss) && win - investment >= loss };
+        break;
+      }
       case "emergency": {
         const plots = BOARD.filter(c => c.t === "prop" && S.room.props[c.index].owner === p.id && (S.room.props[c.index].regionsOwned > 0 || S.room.props[c.index].buildingLevel > 0))
           .sort((a, b) => EN.mortgageValue(S.room, a, S.room.props[a.index]) - EN.mortgageValue(S.room, b, S.room.props[b.index]));
-        if (plots.length) action = { mortgage: plots[0].index };
-        else if (p.cards.length) action = { mortgageCard: p.cards[0] };
+        if (p.cards.length) action = { mortgageCard: p.cards[0] };
+        else if (plots.length) action = { mortgage: plots[0].index };
         else action = { bankrupt: true };
         break;
       }
@@ -1020,9 +1043,10 @@
     saveAndBroadcast();
     render();
   }
-  function doneLanding(action) {
+  function doneLanding(action, automatic) {
+    if (!isMe() || S.room.phase !== "landing" || me().aiManaged) return;
     const room = S.room;
-    markActivity();
+    if (!automatic) markActivity();
     if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
     EN.resolve(room, action || {});
     saveAndBroadcast();
@@ -1363,34 +1387,43 @@
     $$(".screen").forEach(s => s.classList.add("hidden"));
     $(sel).classList.remove("hidden");
   }
-  function createRoom() {
-    const name = ($("#inName").value || "").trim() || "房主";
-    const room = EN.newRoom(name, { initialMoney: ZT.DEFAULT_MONEY, maxPlayers: 6, sound: true, anim: "fast", token: SEL_TOKEN });
-    S.room = room; S.code = room.code; S.playerId = room.players[0].id; S.name = name;
-    saveSession(); saveRoomToCloud(room); watchRoom(room.code); startHeartbeat();
-    render();
+  async function enterRoom(makeNew) {
+    if (!CLOUD_READY || roomBusy) { toast("请先连接云端再进入房间"); return; }
+    roomBusy = true; updateConnStatus();
+    try {
+      const name = ($("#inName").value || "").trim() || (makeNew ? "房主" : "玩家");
+      let room, playerId;
+      if (makeNew) {
+        room = EN.newRoom(name, { initialMoney: ZT.DEFAULT_MONEY, maxPlayers: 6, sound: true, anim: "fast", token: SEL_TOKEN });
+        playerId = room.players[0].id;
+      } else {
+        const code = ($("#inCode").value || "").trim().toUpperCase();
+        if (!/^[A-Z2-9]{4}$/.test(code)) throw new Error("请输入完整的 4 位房间号");
+        room = await timeout(readRoom(code).then(checked).then(extractDoc), 15000, "读取房间超时，请重试");
+        if (!room) throw new Error("房间不存在，请核对房间号");
+        const result = EN.join(room, name, SEL_TOKEN);
+        if (result.error) throw new Error(result.error);
+        playerId = result.player.id;
+      }
+      if (!await saveRoomToCloud(room)) return;
+      S = { code: room.code, playerId, name, room, seen: {}, watcher: null };
+      joinedAt = Date.now(); presenceCheckedAt = 0;
+      saveSession(); watchRoom(room.code); startHeartbeat(); refreshPresence(); render();
+    } catch (e) { toast(e.message || "进入房间失败，请重试"); }
+    finally { roomBusy = false; updateConnStatus(); }
   }
-  async function joinRoom() {
-    const code = ($("#inCode").value || "").trim().toUpperCase();
-    if (code.length < 3) { toast("请输入房间号"); return; }
-    const room = await fetchRoom(code);
-    if (!room) { toast("房间不存在（请确认房间号是否正确）"); return; }
-    if (room.status !== "waiting") { toast("该房间已开始游戏，无法加入"); return; }
-    const name = ($("#inName").value || "").trim() || ("玩家" + (room.players.length + 1));
-    const res = EN.join(room, name, SEL_TOKEN);
-    if (res.error) { toast(res.error); return; }
-    S.room = room; S.code = code; S.playerId = res.player.id; S.name = name;
-    saveSession(); saveRoomToCloud(room); watchRoom(code); startHeartbeat();
-    render();
-  }
+  function createRoom() { return enterRoom(true); }
+  function joinRoom() { return enterRoom(false); }
   async function reconnect() {
+    if (!CLOUD_READY || roomBusy) return;
     const sess = $("#reconnect")._sess;
     if (!sess) return;
     const room = await fetchRoom(sess.code);
     if (!room) { clearSession(); renderHome(); return; }
     if (!playerById(room, sess.playerId)) { clearSession(); toast("你已不在该房间"); renderHome(); return; }
     S.room = room; S.code = sess.code; S.playerId = sess.playerId; S.name = sess.name;
-    saveSession(); watchRoom(sess.code); startHeartbeat();
+    joinedAt = Date.now(); presenceCheckedAt = 0; S.seen = {};
+    saveSession(); watchRoom(sess.code); startHeartbeat(); refreshPresence();
     render();
   }
   function leaveRoom() {
@@ -1423,6 +1456,7 @@
 
   /* ---------- wiring ---------- */
   function bind() {
+    $("#btnRetryCloud").onclick = initCloud;
     $("#btnCreate").onclick = createRoom;
     $("#btnRules").onclick = showRules;
     $("#btnJoin").onclick = joinRoom;
@@ -1468,5 +1502,5 @@
   setInterval(renderTurnTimer, 1000);
   setInterval(function () { if (S.code && CLOUD_DB && S.room) pullRoom(); }, 3000);
 
-  initCloud().then(function () { console.log("CloudBase 已连接"); checkReconnect(); }).catch(function (e) { console.warn("CloudBase 初始化失败", e); toast("联机服务连接失败，请检查网络或稍后重试"); });
+  initCloud();
 })();
